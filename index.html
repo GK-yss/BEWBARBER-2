@@ -257,6 +257,387 @@
                                                 <div className="w-20 h-20 bg-black rounded overflow-hidden shrink-0 relative">
                                                     {s.image && <img src={getDisplayImageUrl(s.image)} className="w-full h-full object-cover" onError={e=>e.target.style.display='none'}/>}
                                                     <label className="absolute inset-0 flex items-center justify-center cursor-pointer bg-black/50 opacity-0 hover:opacity-100 transition-opacity"><Upload size={16}/><input type="file" className="hidden" onChange={e=>handleImageUpload(e, s.id)}/></label>
-                                                    {uploadingId === s.id && <div className="absolute inset-0 bg-black/80 flex items-center 
+                                                    {uploadingId === s.id && <div className="absolute inset-0 bg-black/80 flex items-center justify-center"><Loader2 className="animate-spin text-yellow-500"/></div>}
+                                                </div>
+                                                <div className="flex-1 space-y-2 min-w-0">
+                                                    <input value={s.name} onChange={e=>handleUpdateStyle(s.id,'name',e.target.value)} className="w-full bg-transparent border-b border-slate-700 text-sm outline-none" placeholder="ชื่อ"/>
+                                                    <input type="number" value={s.price} onChange={e=>handleUpdateStyle(s.id,'price',e.target.value)} className="w-full bg-transparent border-b border-slate-700 text-sm outline-none text-yellow-500" placeholder="ราคา"/>
+                                                    <input value={s.image} readOnly className="w-full bg-transparent border-b border-slate-700 text-[10px] text-slate-500 outline-none truncate"/>
+                                                </div>
+                                                
+                                                {/* Delete Button */}
+                                                <div className="flex flex-col justify-start">
+                                                    {confirmDeleteId === s.id ? (
+                                                        <div className="flex flex-col gap-1 z-20 absolute top-2 right-2 bg-slate-800 p-2 rounded shadow-lg border border-slate-600">
+                                                            <button onClick={() => { handleDeleteStyle(s.id); setConfirmDeleteId(null); }} className="bg-red-600 text-white text-[10px] px-2 py-1 rounded">ยืนยัน</button>
+                                                            <button onClick={() => setConfirmDeleteId(null)} className="bg-slate-600 text-white text-[10px] px-2 py-1 rounded">ยกเลิก</button>
+                                                        </div>
+                                                    ) : (
+                                                        <button onClick={() => setConfirmDeleteId(s.id)} className="text-slate-600 hover:text-red-500 p-1"><Trash2 size={18}/></button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {tab === 'queue' && (
+                            <div className="space-y-4 animate-in">
+                                <div className="flex gap-2 overflow-x-auto pb-2">
+                                    {['All', 'Pending', 'Approved', 'Completed', 'Rejected'].map(s => (
+                                        <button key={s} onClick={() => setFilterStatus(s)} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${filterStatus === s ? 'bg-yellow-500 text-slate-900 font-bold' : 'bg-slate-800 text-slate-400'}`}>{s}</button>
+                                    ))}
+                                </div>
+                                <div className="space-y-2">
+                                    {filteredBookings.map((b) => (
+                                        <div key={b.id} className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-start cursor-pointer hover:border-yellow-500/50 transition-colors" onClick={() => setEditingBooking(b)}>
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${getStatusColor(b.status)}`}>{b.status}</span>
+                                                    <span className="text-slate-400 text-xs">{b.date} {b.time}</span>
+                                                </div>
+                                                <div className="font-bold text-white">{b.name} <span className="text-slate-500 font-normal">({b.phone})</span></div>
+                                                <div className="text-xs text-slate-400">{b.service} - {b.barber}</div>
+                                            </div>
+                                            {b.slip && <div className="text-green-500"><FileText size={16}/></div>}
+                                        </div>
+                                    ))}
+                                    {filteredBookings.length === 0 && <p className="text-center text-slate-500 py-8">ไม่พบรายการ</p>}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Edit Modal */}
+                        {editingBooking && (
+                            <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
+                                <div className="bg-slate-900 p-6 rounded-xl w-full max-w-md border border-yellow-500 shadow-2xl animate-in my-8">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <h3 className="font-bold text-xl text-white">จัดการคิว #{editingBooking.id}</h3>
+                                        <button onClick={() => setEditingBooking(null)}><X size={24}/></button>
+                                    </div>
+                                    
+                                    <form onSubmit={handleSaveEditBooking} className="space-y-6">
+                                        <div className="bg-slate-800 p-4 rounded-lg">
+                                            <label className="text-xs text-slate-400 block mb-2">สถานะ (Status)</label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {['Pending', 'Approved', 'Rejected', 'Completed'].map(s => (
+                                                    <button type="button" key={s} onClick={() => setEditingBooking({...editingBooking, status: s})}
+                                                        className={`py-2 px-3 rounded text-xs font-bold border transition-colors ${editingBooking.status === s ? getStatusColor(s) + ' border-current' : 'border-slate-700 text-slate-500'}`}>
+                                                        {s}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {editingBooking.slip ? (
+                                            <div className="bg-slate-800 p-4 rounded-lg">
+                                                <label className="text-xs text-slate-400 block mb-2 flex items-center gap-2"><FileText size={14}/> หลักฐานการโอนเงิน</label>
+                                                <a href={getDisplayImageUrl(editingBooking.slip)} target="_blank" className="block relative aspect-video bg-black rounded overflow-hidden group">
+                                                    <img src={getDisplayImageUrl(editingBooking.slip)} className="w-full h-full object-contain" />
+                                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs">คลิกเพื่อดูรูปเต็ม</div>
+                                                </a>
+                                            </div>
+                                        ) : <div className="text-xs text-red-400 bg-red-900/10 p-2 rounded text-center">ลูกค้าไม่ได้แนบสลิป</div>}
+
+                                        <div className="bg-slate-800 p-4 rounded-lg space-y-3">
+                                            <h4 className="text-sm font-bold text-white flex items-center gap-2 border-b border-slate-700 pb-2"><Camera size={16}/> บันทึกหลังการขาย</h4>
+                                            
+                                            <div>
+                                                <label className="text-xs text-slate-400">สภาพผม</label>
+                                                <select className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white mt-1" 
+                                                    value={editingBooking.hairCond || ''} onChange={e => setEditingBooking({...editingBooking, hairCond: e.target.value})}>
+                                                    <option value="">- ระบุสภาพผม -</option>
+                                                    <option value="Normal">ปกติ</option>
+                                                    <option value="Dry">แห้งเสีย</option>
+                                                    <option value="Oily">มัน</option>
+                                                    <option value="Thin">บาง</option>
+                                                </select>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {[
+                                                    { key: 'beforeImg', label: 'Before' }, 
+                                                    { key: 'afterImg', label: 'After' }
+                                                ].map(field => (
+                                                    <div key={field.key}>
+                                                        <label className="text-[10px] text-slate-400 mb-1 block">{field.label}</label>
+                                                        <div className="aspect-square bg-slate-900 rounded border border-slate-700 relative flex items-center justify-center overflow-hidden">
+                                                            {editingBooking[field.key] ? 
+                                                                <img src={getDisplayImageUrl(editingBooking[field.key])} className="w-full h-full object-cover"/> : 
+                                                                <Camera size={20} className="text-slate-700"/>
+                                                            }
+                                                            <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 cursor-pointer transition-opacity">
+                                                                <Upload size={16}/><input type="file" className="hidden" onChange={e => handleImageUpload(e, editingBooking.id, (url) => setEditingBooking({...editingBooking, [field.key]: url}))}/>
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <button type="submit" disabled={loadingData} className="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-3 rounded-lg shadow-lg flex justify-center items-center gap-2">
+                                            {loadingData ? <Loader2 className="animate-spin"/> : <Save size={18}/>} บันทึกการเปลี่ยนแปลง
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const CheckStatus = ({ phone, setPhone, onCheck, statusState, myBookings, onBack }) => (
+            <div className="min-h-screen bg-slate-900 text-slate-200 font-sans">
+                <div className="max-w-md mx-auto min-h-screen bg-slate-800 flex flex-col">
+                    <div className="bg-slate-700 p-4 flex items-center gap-4 sticky top-0 z-20"><button onClick={onBack} className="bg-slate-600 p-2 rounded-full hover:bg-slate-500 transition-colors"><X size={16}/></button><h1 className="font-bold text-lg">เช็คสถานะการจอง</h1></div>
+                    <div className="p-6 space-y-6">
+                        <form onSubmit={(e) => { e.preventDefault(); onCheck(); }} className="space-y-4">
+                            <div className="space-y-2"><label className="text-sm text-slate-400">เบอร์โทรศัพท์</label><input type="tel" value={phone} onChange={e => setPhone(e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white text-center text-lg tracking-wider focus:border-yellow-500 outline-none transition-colors" placeholder="08X-XXX-XXXX" required/></div>
+                            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg font-bold flex justify-center items-center gap-2 transition-colors">{statusState === 'loading' ? <Loader2 className="animate-spin"/> : <Search size={20}/>} ค้นหาข้อมูล</button>
+                        </form>
+                        {statusState === 'found' && (
+                            <div className="space-y-4 animate-in">
+                                <h3 className="text-green-400 font-bold flex items-center gap-2"><CheckCircle size={16}/> พบประวัติ ({myBookings.length})</h3>
+                                {myBookings.map((bk, idx) => (
+                                    <div key={idx} className="bg-slate-900 p-4 rounded-lg border-l-4 border-yellow-500 shadow-lg animate-in" style={{animationDelay: `${idx * 0.1}s`}}>
+                                        <div className="flex justify-between items-start mb-2"><span className="text-yellow-500 font-bold text-lg">{bk.time} น.</span><span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">{bk.date}</span></div>
+                                        <div className="text-sm text-slate-300 space-y-1"><p>✂️ {bk.service}</p><p>👨‍🦲 {bk.barber}</p></div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {statusState === 'not-found' && <div className="text-center py-8 text-slate-500 bg-slate-900/50 rounded-lg animate-in"><AlertCircle size={40} className="mx-auto mb-2 opacity-50"/><p>ไม่พบข้อมูล</p></div>}
+                    </div>
+                </div>
+            </div>
+        );
+
+        // --- Main App Component ---
+
+        const BarberBookingApp = () => {
+            const defaultStyles = [
+                { id: 1, name: 'Vintage Slick Back', price: 350, image: 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=500&auto=format&fit=crop&q=60' },
+                { id: 2, name: 'Korean Two Block', price: 300, image: 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=500&auto=format&fit=crop&q=60' },
+                { id: 3, name: 'Skin Fade / Undercut', price: 250, image: 'https://images.unsplash.com/photo-1605497788044-5a32c7078486?w=500&auto=format&fit=crop&q=60' },
+                { id: 4, name: 'Mullet Modern', price: 400, image: 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=500&auto=format&fit=crop&q=60' }
+            ];
+
+            const [view, setView] = useState('customer');
+            const [hairstyles, setHairstyles] = useState(defaultStyles);
+            const [shopStatus, setShopStatus] = useState('OPEN');
+            const [busySlots, setBusySlots] = useState([]);
+            const [formData, setFormData] = useState({ name: '', phone: '', date: '', time: '', service: 'ตัดผม', selectedStyle: null, barber: 'ช่างท่านไหนก็ได้' });
+            
+            const [checkPhone, setCheckPhone] = useState('');
+            const [myBookings, setMyBookings] = useState([]);
+            const [checkStatusState, setCheckStatusState] = useState('idle');
+
+            const [adminSearchQuery, setAdminSearchQuery] = useState('');
+            const [adminSearchResults, setAdminSearchResults] = useState([]);
+            const [isSearching, setIsSearching] = useState(false);
+            const [editingBooking, setEditingBooking] = useState(null);
+            
+            const [status, setStatus] = useState('idle');
+            const [message, setMessage] = useState('');
+            const [loadingData, setLoadingData] = useState(false);
+            const [uploadingId, setUploadingId] = useState(null);
+            
+            // For Dashboard
+            const [allBookings, setAllBookings] = useState([]);
+
+            useEffect(() => {
+                const savedStyles = localStorage.getItem('bew_barber_styles');
+                if (savedStyles) { try { setHairstyles(JSON.parse(savedStyles)); } catch (e) {} }
+                fetchData(false);
+            }, []);
+
+            // Auto-Refresh for Customer
+            useEffect(() => {
+                const interval = setInterval(() => { fetchData(false); }, 15000); 
+                return () => clearInterval(interval);
+            }, [fetchData]);
+
+            useEffect(() => { localStorage.setItem('bew_barber_styles', JSON.stringify(hairstyles)); }, [hairstyles]);
+
+            const fetchData = useCallback(async (isManual = false, updateStyles = true) => {
+                setLoadingData(true);
+                try {
+                    const response = await fetch(`${FIXED_SCRIPT_URL}?action=getData`);
+                    const data = await response.json();
+                    if (data.shopStatus) setShopStatus(data.shopStatus);
+                    if (data.busySlots) setBusySlots(data.busySlots);
+                    if (data.allBookings) setAllBookings(data.allBookings);
+                    if (updateStyles && data.styles && Array.isArray(data.styles) && data.styles.length > 0) {
+                        setHairstyles(data.styles);
+                    }
+                    if (isManual) alert("✅ เชื่อมต่อสำเร็จ!");
+                } catch (error) { if (isManual) alert(`❌ เชื่อมต่อล้มเหลว`); } 
+                finally { setLoadingData(false); }
+            }, []);
+
+            // Updated Busy Logic
+            const isSlotBusy = (time) => {
+                if (!formData.date) return false;
+                if (formData.barber !== 'ช่างท่านไหนก็ได้') {
+                    return busySlots.includes(`${formData.date}|${time}|${formData.barber}`);
+                }
+                const busyCount = ALL_BARBERS.filter(b => 
+                    busySlots.includes(`${formData.date}|${time}|${b}`)
+                ).length;
+                return busyCount >= ALL_BARBERS.length;
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (isSlotBusy(formData.time)) { setStatus('error'); setMessage('คิวนี้เต็มแล้วครับ'); return; }
+                setStatus('loading');
+                const formPayload = new FormData();
+                formPayload.append('name', formData.name); formPayload.append('phone', formData.phone);
+                formPayload.append('date', formData.date); formPayload.append('time', formData.time);
+                formPayload.append('service', formData.service); formPayload.append('barber', formData.barber);
+                formPayload.append('price', formData.selectedStyle ? formData.selectedStyle.price : '-');
+                formPayload.append('imageUrl', formData.selectedStyle ? formData.selectedStyle.image : '');
+                formPayload.append('action', 'booking');
+                
+                try {
+                    await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: formPayload, mode: 'no-cors' });
+                    if (formData.barber !== 'ช่างท่านไหนก็ได้') {
+                        setBusySlots(prev => [...prev, `${formData.date}|${formData.time}|${formData.barber}`]);
+                    }
+                    setStatus('success'); setFormData({ ...formData, name: '', phone: '', date: '', time: '' });
+                } catch (error) { setStatus('error'); setMessage('Error connecting'); }
+            };
+
+            const handleAdminLogin = (pass) => {
+                if (pass === '1234') { 
+                    setView('admin'); 
+                    return true; // Success
+                }
+                return false; // Failed
+            };
+
+            const toggleShopStatus = async () => {
+                const newStatus = shopStatus === 'OPEN' ? 'CLOSED' : 'OPEN';
+                setShopStatus(newStatus);
+                const form = new FormData(); form.append('action', 'toggleStatus'); form.append('status', newStatus);
+                try { await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form, mode: 'no-cors' }); } catch(e){}
+            };
+
+            const handleAdminSearch = async (e) => {
+                e.preventDefault(); setIsSearching(true);
+                try {
+                    const res = await fetch(`${FIXED_SCRIPT_URL}?action=searchAll&query=${adminSearchQuery}`);
+                    const data = await res.json(); setAdminSearchResults(data.results || []);
+                } catch(e) { alert('Error'); } finally { setIsSearching(false); }
+            };
+
+            const handleSaveEditBooking = async (e) => {
+                e.preventDefault(); if(!editingBooking) return;
+                const form = new FormData();
+                form.append('action', 'updateBooking'); form.append('rowIndex', editingBooking.rowIndex);
+                form.append('name', editingBooking.name); form.append('phone', editingBooking.phone);
+                form.append('date', editingBooking.date); form.append('time', editingBooking.time);
+                form.append('barber', editingBooking.barber);
+                try {
+                    await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form, mode: 'no-cors' });
+                    alert('แก้ไขสำเร็จ'); setEditingBooking(null); fetchData(false);
+                } catch(e) { alert('Error'); }
+            };
+
+            const handleImageUpload = async (e, id) => {
+                const file = e.target.files[0]; if(!file) return; setUploadingId(id);
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = async () => {
+                    const form = new FormData();
+                    form.append('action', 'uploadImage'); form.append('fileData', reader.result.split(',')[1]);
+                    form.append('mimeType', file.type); form.append('fileName', file.name);
+                    try {
+                        const res = await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form });
+                        const data = await res.json();
+                        if(data.result === 'success') {
+                            setHairstyles(prev => prev.map(s => s.id === id ? { ...s, image: data.url } : s));
+                            alert('อัปโหลดสำเร็จ! อย่าลืมกด "บันทึก Server"');
+                        }
+                    } catch(e) { alert('Upload failed'); } finally { setUploadingId(null); }
+                };
+            };
+
+            const checkMyBooking = async () => {
+                setCheckStatusState('loading');
+                try {
+                    const res = await fetch(`${FIXED_SCRIPT_URL}?action=checkBooking&phone=${checkPhone}`);
+                    const data = await res.json();
+                    if(data.bookings?.length) { setMyBookings(data.bookings); setCheckStatusState('found'); } else { setCheckStatusState('not-found'); }
+                } catch(e) { setCheckStatusState('error'); }
+            };
+
+            if (view === 'admin-login') return <AdminLogin onLogin={handleAdminLogin} onCancel={() => setView('customer')} />;
+            if (view === 'admin') return <AdminPanel 
+                shopStatus={shopStatus} toggleShopStatus={toggleShopStatus} fetchData={fetchData} loadingData={loadingData}
+                adminSearchQuery={adminSearchQuery} setAdminSearchQuery={setAdminSearchQuery} handleAdminSearch={handleAdminSearch}
+                isSearching={isSearching} adminSearchResults={adminSearchResults} setEditingBooking={setEditingBooking} editingBooking={editingBooking}
+                handleSaveEditBooking={handleSaveEditBooking} styles={hairstyles} 
+                handleAddStyle={() => setHairstyles([...hairstyles, { id: Date.now() + Math.random(), name: 'แบบทรงใหม่', price: 300, image: 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=500' }])}
+                handleUpdateStyle={(id, f, v) => setHairstyles(prev => prev.map(s => s.id === id ? { ...s, [f]: v } : s))}
+                handleDeleteStyle={(id) => {
+                    // Custom Confirm Logic is handled inside AdminPanel now
+                    setHairstyles(prev => prev.filter(s => s.id !== id));
+                }}
+                handleImageUpload={handleImageUpload} uploadingId={uploadingId}
+                saveStylesToServer={async () => { 
+                    const form = new FormData(); form.append('action', 'saveStyles'); form.append('styles', JSON.stringify(hairstyles));
+                    try { await fetch(FIXED_SCRIPT_URL, {method:'POST', body: form, mode: 'no-cors'}); alert('บันทึกข้อมูลลง Server เรียบร้อย!'); } catch(e){}
+                }}
+                onBack={() => setView('customer')}
+                allBookings={allBookings}
+            />;
+            if (view === 'check-status') return <CheckStatus phone={checkPhone} setPhone={setCheckPhone} onCheck={checkMyBooking} statusState={checkStatusState} myBookings={myBookings} onBack={() => setView('customer')} />;
+
+            return (
+                <div className="min-h-screen bg-slate-900 text-slate-200 font-sans selection:bg-yellow-500 selection:text-slate-900">
+                    <div className="max-w-md mx-auto min-h-screen flex flex-col relative bg-slate-800 shadow-2xl overflow-hidden">
+                        <div className="bg-gradient-to-r from-yellow-600 to-yellow-500 p-6 text-slate-900 relative">
+                            <div className="flex justify-between items-start">
+                                <div><h1 className="text-3xl font-bold tracking-tighter">BEW BARBER</h1><div className="flex items-center gap-2 mt-1">{shopStatus === 'OPEN' ? <span className="bg-green-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 animate-pulse"><span className="w-2 h-2 bg-white rounded-full"></span> OPEN</span> : <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1"><Power size={8}/> CLOSED</span>}<p className="font-medium opacity-90 text-sm">จองคิวตัดผมออนไลน์</p></div></div>
+                                <div className="flex gap-2"><button onClick={() => setView('check-status')} className="bg-slate-900/10 hover:bg-slate-900/20 p-2 rounded-full transition-colors" title="เช็คคิว"><Search size={18} /></button><button onClick={() => setView('admin-login')} className="bg-slate-900/10 hover:bg-slate-900/20 p-2 rounded-full transition-colors"><Lock size={18} /></button></div>
+                            </div>
+                        </div>
+                        {shopStatus === 'CLOSED' && <div className="absolute inset-0 z-50 bg-slate-900/90 flex flex-col items-center justify-center p-8 text-center backdrop-blur-sm animate-in"><div className="bg-slate-800 p-8 rounded-2xl border border-red-500/30 shadow-2xl max-w-xs w-full"><Power size={48} className="text-red-500 mx-auto mb-4"/><h2 className="text-2xl font-bold text-white mb-2">ร้านปิดรับคิว</h2><button onClick={() => setView('check-status')} className="w-full bg-slate-700 py-2 rounded-lg text-sm hover:bg-slate-600 transition-colors">เช็คคิว</button></div></div>}
+                        <div className="flex-1 overflow-y-auto pb-8 relative">
+                            {loadingData && <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500/20 overflow-hidden z-10"><div className="w-full h-full bg-yellow-500 animate-progress origin-left" style={{animation: 'progress 1s infinite linear'}}></div></div>}
+                            {status === 'success' ? (
+                               <div className="flex flex-col items-center justify-center h-full text-center py-10 animate-in px-6"><div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mb-4 text-green-500"><CheckCircle size={48} /></div><h2 className="text-2xl font-bold text-white mb-2">จองสำเร็จ!</h2><p className="text-slate-400 mb-6">{formData.date} {formData.time}</p><div className="flex gap-3"><button onClick={() => setStatus('idle')} className="bg-slate-700 hover:bg-slate-600 text-white py-2 px-6 rounded-full transition-colors">จองเพิ่ม</button></div></div>
+                            ) : (
+                                <div className="p-6 space-y-8 animate-in">
+                                    <section><h2 className="text-yellow-500 font-bold mb-4 text-sm flex items-center gap-2">🔥 ทรงผมยอดฮิต</h2><div className="flex gap-3 overflow-x-auto pb-4 snap-x">{hairstyles.map((style) => (<div key={style.id} onClick={() => setFormData(p=>({...p, selectedStyle: style, service: `ทรง ${style.name}`}))} className={`snap-center shrink-0 w-32 relative group cursor-pointer rounded-xl overflow-hidden border-2 transition-all ${formData.selectedStyle?.id === style.id ? 'border-yellow-500 scale-95' : 'border-transparent'}`}><img src={getDisplayImageUrl(style.image)} className="w-full h-40 object-cover" referrerPolicy="no-referrer" onError={(e)=>{e.target.style.display='none'; e.target.nextSibling.style.display='flex';}} /><div className="absolute inset-0 bg-slate-800 flex items-center justify-center hidden"><ImageIcon size={24}/></div><div className="absolute bottom-0 left-0 w-full bg-black/60 p-2"><p className="text-[10px] text-white truncate">{style.name}</p></div></div>))}</div></section>
+                                    <form onSubmit={handleSubmit} className="space-y-4">
+                                        <div className="space-y-1"><label className="text-xs text-slate-400">ชื่อ-นามสกุล</label><input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-yellow-500 outline-none transition-colors" /></div>
+                                        <div className="space-y-1"><label className="text-xs text-slate-400">เบอร์โทร</label><input required type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-yellow-500 outline-none transition-colors" /></div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="space-y-1"><label className="text-xs text-slate-400">วันที่</label><input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-yellow-500 outline-none [color-scheme:dark] transition-colors" /></div>
+                                            <div className="space-y-1"><label className="text-xs text-slate-400">ช่าง</label><select value={formData.barber} onChange={e => setFormData({...formData, barber: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-yellow-500 outline-none transition-colors">{["ช่างท่านไหนก็ได้", ...ALL_BARBERS].map(b => <option key={b} value={b}>{b}</option>)}</select></div>
+                                        </div>
+                                        <div className="space-y-2"><label className="text-xs text-slate-400">เวลา</label><div className="grid grid-cols-4 gap-2">{TIME_SLOTS.map(t => { const busy = isSlotBusy(t); const selected = formData.time === t; return (<button key={t} type="button" disabled={busy} onClick={() => setFormData({...formData, time: t})} className={`py-2 rounded-lg text-xs font-bold transition-all relative ${busy ? 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-800' : selected ? 'bg-yellow-500 text-slate-900 border border-yellow-500' : 'bg-slate-900 text-slate-300 border border-slate-700 hover:border-yellow-500'}`}>{t}{busy && <div className="absolute inset-0 flex items-center justify-center text-slate-500"><X size={16} className="opacity-50"/></div>}</button>) })}</div></div>
+                                        {status === 'error' && <div className="text-red-400 text-sm bg-red-500/10 p-2 rounded flex gap-2 animate-in"><AlertCircle size={16}/> {message}</div>}
+                                        <button type="submit" disabled={status === 'loading'} className="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-3.5 px-4 rounded-lg shadow-lg shadow-yellow-500/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98] mt-2">{status === 'loading' ? <Loader2 className="animate-spin"/> : 'ยืนยัน'}</button>
+                                    </form>
+                                    
+                                    {/* Live Queue Status */}
+                                    {formData.date && <LiveQueueStatus selectedDate={formData.date} busySlots={busySlots} />}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<BarberBookingApp />);
+    </script>
 </body>
 </html>
