@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bew Barber Booking System</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-in { animation: fadeIn 0.3s ease-in-out; }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        .animate-progress { animation: progress 1s infinite linear; transform-origin: left; }
+        @keyframes progress { 0% { transform: scaleX(0); } 50% { transform: scaleX(0.5); } 100% { transform: scaleX(1); } }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200 font-sans">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useMemo } = React;
+        
+        // --- Embedded Icons (Complete Set) ---
+        const IconBase = ({ children, ...props }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>{children}</svg>
+        );
+        const Icons = {
+            Calendar: (p) => <IconBase {...p}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></IconBase>,
+            Clock: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></IconBase>,
+            Scissors: (p) => <IconBase {...p}><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" x2="8.12" y1="4" y2="15.88"/><line x1="14.47" x2="20" y1="14.48" y2="20"/><line x1="8.12" x2="12" y1="8.12" y2="12"/></IconBase>,
+            User: (p) => <IconBase {...p}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></IconBase>,
+            Phone: (p) => <IconBase {...p}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></IconBase>,
+            CheckCircle: (p) => <IconBase {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></IconBase>,
+            AlertCircle: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></IconBase>,
+            Loader2: (p) => <IconBase {...p}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></IconBase>,
+            Settings: (p) => <IconBase {...p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></IconBase>,
+            Lock: (p) => <IconBase {...p}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></IconBase>,
+            Edit3: (p) => <IconBase {...p}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></IconBase>,
+            Plus: (p) => <IconBase {...p}><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></IconBase>,
+            Trash2: (p) => <IconBase {...p}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></IconBase>,
+            ImageIcon: (p) => <IconBase {...p}><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></IconBase>,
+            X: (p) => <IconBase {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></IconBase>,
+            Search: (p) => <IconBase {...p}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></IconBase>,
+            Power: (p) => <IconBase {...p}><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" x2="12" y1="2" y2="12"/></IconBase>,
+            RefreshCw: (p) => <IconBase {...p}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></IconBase>,
+            ChevronDown: (p) => <IconBase {...p}><path d="m6 9 6 6 6-6"/></IconBase>,
+            ChevronUp: (p) => <IconBase {...p}><path d="m18 15-6-6-6 6"/></IconBase>,
+            Upload: (p) => <IconBase {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></IconBase>,
+            Save: (p) => <IconBase {...p}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></IconBase>,
+            List: (p) => <IconBase {...p}><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></IconBase>,
+            FileText: (p) => <IconBase {...p}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></IconBase>,
+            BarChart: (p) => <IconBase {...p}><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></IconBase>,
+            Camera: (p) => <IconBase {...p}><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></IconBase>
+        };
+
+        const { Calendar, Clock, Scissors, User, Phone, CheckCircle, AlertCircle, Loader2, Settings, Lock, Edit3, Plus, Trash2, ImageIcon, X, Search, Power, RefreshCw, ChevronDown, ChevronUp, Upload, Save, List, FileText, BarChart, Camera } = Icons;
+
+        // --- Config & Helpers ---
+        const FIXED_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyy_uDAz5UHGXmsa-daRPtvXVw2HHe2fAZlNT5n0xdcI4JAtscHE9Dy5WwdY8n7k6c/exec";
+        const ALL_BARBERS = ["ช่างบิว (Master)", "ช่างเอก (Senior)", "ช่างนนท์ (Junior)"];
+        const TIME_SLOTS = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
+
+        const getDisplayImageUrl = (url) => {
+            if (!url) return '';
+            try {
+                if (url.includes('drive.google.com') && url.includes('id=')) {
+                    const idMatch = url.match(/id=([^&]+)/) || url.match(/\/d\/([^/]+)/);
+                    if (idMatch) return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1000`;
+                }
+            } catch (e) { return ''; }
+            return url;
+        };
+
+        // --- Sub-Components ---
+
+        const LiveQueueStatus = ({ selectedDate, busySlots }) => {
+            if (!selectedDate) return null;
+            const todaysBookings = busySlots.filter(s => s.startsWith(selectedDate));
+            const slotsByTime = {};
+            todaysBookings.forEach(s => {
+                const parts = s.split('|');
+                const time = parts[1];
+                const barber = parts[2];
+                if (!slotsByTime[time]) slotsByTime[time] = [];
+                slotsByTime[time].push(barber);
+            });
+
+            return (
+                <div className="mt-6 bg-slate-800 p-4 rounded-xl border border-slate-700 animate-in">
+                    <h3 className="text-yellow-500 font-bold mb-3 flex items-center gap-2 text-sm">
+                        <List size={16}/> สถานะคิวประจำวันที่ {selectedDate}
+                    </h3>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        {TIME_SLOTS.map(t => {
+                            const busyBarbers = slotsByTime[t] || [];
+                            const isFull = busyBarbers.length >= ALL_BARBERS.length;
+                            return (
+                                <div key={t} className={`flex justify-between items-center p-2 rounded text-xs border ${isFull ? 'bg-red-900/20 border-red-900/50' : 'bg-slate-900/50 border-slate-800'}`}>
+                                    <span className="font-bold w-12 text-slate-400">{t} น.</span>
+                                    <div className="flex-1 px-2">
+                                        {busyBarbers.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1">
+                                                {busyBarbers.map((b, i) => (
+                                                    <span key={i} className="bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-[4px] text-[10px] truncate max-w-[100px]">{b}</span>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="text-green-500/50 italic">ว่างทุกท่าน</span>
+                                        )}
+                                    </div>
+                                    <div className={`w-2 h-2 rounded-full ${isFull ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+        const AdminDashboard = ({ allBookings }) => {
+            const stats = useMemo(() => {
+                if (!allBookings) return { income: 0, count: 0, byBarber: {} };
+                const validBookings = allBookings.filter(b => b.status === 'Completed' || b.status === 'Approved');
+                const income = validBookings.reduce((sum, b) => sum + (parseInt(b.price) || 0), 0);
+                const byBarber = {};
+                ALL_BARBERS.forEach(b => byBarber[b] = 0);
+                validBookings.forEach(b => { if(byBarber[b] !== undefined) byBarber[b]++; });
+                return { income, count: validBookings.length, byBarber };
+            }, [allBookings]);
+
+            const maxVal = Math.max(...Object.values(stats.byBarber), 1);
+
+            return (
+                <div className="space-y-4 animate-in">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-slate-800 p-4 rounded-xl border border-green-500/30">
+                            <div className="text-slate-400 text-xs">รายได้รวม</div>
+                            <div className="text-2xl font-bold text-green-400">฿{stats.income.toLocaleString()}</div>
+                        </div>
+                        <div className="bg-slate-800 p-4 rounded-xl border border-blue-500/30">
+                            <div className="text-slate-400 text-xs">จำนวนคิว</div>
+                            <div className="text-2xl font-bold text-blue-400">{stats.count}</div>
+                        </div>
+                    </div>
+                    <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                        <h4 className="text-white font-bold mb-3 flex items-center gap-2"><BarChart size={16}/> สถิติช่าง</h4>
+                        <div className="space-y-3">
+                            {Object.entries(stats.byBarber).map(([name, count]) => (
+                                <div key={name}>
+                                    <div className="flex justify-between text-xs text-slate-300 mb-1">
+                                        <span>{name}</span><span>{count} คิว</span>
+                                    </div>
+                                    <div className="w-full bg-slate-700 rounded-full h-2">
+                                        <div className="bg-yellow-500 h-2 rounded-full transition-all duration-500" style={{width: `${(count/maxVal)*100}%`}}></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const AdminLogin = ({ onLogin, onCancel }) => {
+            const [pass, setPass] = useState('');
+            const [error, setError] = useState('');
+            return (
+                <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+                    <div className="bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-sm border border-slate-700 animate-in">
+                        <h2 className="text-xl font-bold text-yellow-500 mb-4 flex items-center gap-2"><Lock size={20}/> Admin Login</h2>
+                        <form onSubmit={(e) => { 
+                            e.preventDefault(); 
+                            if (!onLogin(pass)) setError('รหัสผ่านไม่ถูกต้อง');
+                            else setError('');
+                        }} className="space-y-4">
+                            <input type="password" placeholder="รหัสผ่าน (1234)" value={pass} onChange={e => {setPass(e.target.value); setError('');}} className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white focus:border-yellow-500 outline-none transition-colors"/>
+                            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+                            <div className="flex gap-2">
+                                <button type="submit" className="flex-1 bg-yellow-500 text-slate-900 py-2 rounded font-bold hover:bg-yellow-400 transition-colors">เข้าสู่ระบบ</button>
+                                <button type="button" onClick={onCancel} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">ยกเลิก</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const AdminPanel = ({ 
+            shopStatus, toggleShopStatus, fetchData, loadingData, allBookings,
+            setEditingBooking, editingBooking, handleSaveEditBooking, 
+            styles, handleAddStyle, handleUpdateStyle, handleDeleteStyle, handleImageUpload, saveStylesToServer, uploadingId, onBack 
+        }) => {
+            const [tab, setTab] = useState('dashboard');
+            const [filterStatus, setFilterStatus] = useState('All');
+            const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
+            useEffect(() => { const i = setInterval(() => fetchData(false, false), 10000); return () => clearInterval(i); }, [fetchData]);
+
+            // Filter logic
+            const filteredBookings = useMemo(() => {
+                if(!allBookings) return [];
+                let res = [...allBookings].sort((a,b) => b.id - a.id);
+                if(filterStatus !== 'All') res = res.filter(b => b.status === filterStatus);
+                return res;
+            }, [allBookings, filterStatus]);
+
+            const getStatusColor = (s) => {
+                if(s === 'Approved') return 'text-green-400 bg-green-900/30';
+                if(s === 'Rejected') return 'text-red-400 bg-red-900/30';
+                if(s === 'Completed') return 'text-blue-400 bg-blue-900/30';
+                return 'text-yellow-400 bg-yellow-900/30'; // Pending
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-900 text-slate-200 font-sans pb-20 animate-in">
+                    <div className="bg-slate-800 p-4 border-b border-slate-700 sticky top-0 z-20 flex justify-between items-center shadow-lg">
+                        <h1 className="font-bold text-yellow-500 flex items-center gap-2"><Settings size={20}/> จัดการร้าน</h1>
+                        <button onClick={onBack} className="text-sm bg-slate-700 px-3 py-1 rounded hover:bg-slate-600 text-white">กลับหน้าร้าน</button>
+                    </div>
+                    
+                    <div className="flex p-2 bg-slate-800 gap-1 overflow-x-auto">
+                        {['dashboard', 'queue', 'menu'].map(t => (
+                            <button key={t} onClick={() => setTab(t)} className={`flex-1 py-2 text-xs font-bold uppercase rounded ${tab === t ? 'bg-yellow-500 text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
+                                {t === 'dashboard' ? 'แดชบอร์ด' : t === 'queue' ? 'รายการจอง' : 'เมนู/ร้าน'}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="max-w-3xl mx-auto p-4 space-y-6">
+                        
+                        {tab === 'dashboard' && <AdminDashboard allBookings={allBookings} />}
+
+                        {tab === 'menu' && (
+                            <div className="space-y-6 animate-in">
+                                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
+                                    <div><h3 className="font-bold text-white">สถานะร้าน</h3><p className={`text-xs ${shopStatus==='OPEN'?'text-green-500':'text-red-500'}`}>{shopStatus==='OPEN'?'🟢 เปิด':'🔴 ปิด'}</p></div>
+                                    <button onClick={toggleShopStatus} className="bg-slate-700 px-4 py-2 rounded text-xs">สลับสถานะ</button>
+                                </div>
+                                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                                    <div className="flex justify-between mb-4"><h3 className="font-bold text-white">จัดการทรงผม</h3>
+                                    <div className="flex gap-2"><button onClick={handleAddStyle} className="bg-green-600/20 text-green-500 px-2 py-1 rounded text-xs">+ เพิ่ม</button><button onClick={saveStylesToServer} className="bg-blue-600/20 text-blue-500 px-2 py-1 rounded text-xs">บันทึก</button></div></div>
+                                    <div className="grid gap-4">
+                                        {styles.map(s => (
+                                            <div key={s.id} className="bg-slate-900 p-3 rounded border border-slate-700 flex gap-3 relative">
+                                                <div className="w-20 h-20 bg-black rounded overflow-hidden shrink-0 relative">
+                                                    {s.image && <img src={getDisplayImageUrl(s.image)} className="w-full h-full object-cover" onError={e=>e.target.style.display='none'}/>}
+                                                    <label className="absolute inset-0 flex items-center justify-center cursor-pointer bg-black/50 opacity-0 hover:opacity-100 transition-opacity"><Upload size={16}/><input type="file" className="hidden" onChange={e=>handleImageUpload(e, s.id)}/></label>
+                                                    {uploadingId === s.id && <div className="absolute inset-0 bg-black/80 flex items-center 
+</body>
+</html>
