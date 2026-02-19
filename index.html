@@ -1,253 +1,805 @@
-// --- CONFIGURATION ---
-var SHEET_ID = "1VfDsy0BS7M3ztWuzPDHtfG8rxF6UNmzASKA3dngFMog";
-var FOLDER_ID = "1J0IekxUXuKU7xbTLuX65fTlaxtPysFaH";
-var SHEET_NAME_BOOKINGS = "BEWBARBER 2"; 
-var SHEET_NAME_SETTINGS = "Settings"; 
-
-function doGet(e) { return handleRequest(e); }
-function doPost(e) { return handleRequest(e); }
-
-function handleRequest(e) {
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) return responseJSON({ result: "error", message: "Server busy" });
-
-  try {
-    initSheets(); // ตรวจสอบและสร้าง Sheet
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bew Barber Booking System</title>
     
-    if (!e || !e.parameter) return responseJSON({ result: "error", message: "No parameters" });
-    var action = e.parameter.action;
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
-    var ss = SpreadsheetApp.openById(SHEET_ID);
-    var bookingSheet = ss.getSheetByName(SHEET_NAME_BOOKINGS);
-    var settingSheet = ss.getSheetByName(SHEET_NAME_SETTINGS);
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
 
-    // --- 1. ดึงข้อมูล (getData) ---
-    if (action == "getData") {
-      var settingsRaw = settingSheet.getDataRange().getValues();
-      var bookingsRaw = bookingSheet.getDataRange().getValues();
-      
-      var shopStatus = "OPEN";
-      var stylesData = [];
-      
-      // อ่าน Settings
-      for (var i = 1; i < settingsRaw.length; i++) {
-        if (settingsRaw[i][0] === "SHOP_STATUS") shopStatus = settingsRaw[i][1];
-        if (settingsRaw[i][0] === "STYLES_DATA") { try { stylesData = JSON.parse(settingsRaw[i][1]); } catch(e) {} }
-      }
-      
-      var busySlots = [];
-      var allBookings = [];
-      
-      // อ่าน Bookings (เริ่มแถว 1 ข้าม Header)
-      for (var i = 1; i < bookingsRaw.length; i++) {
-        var row = bookingsRaw[i];
-        // Col Index: 0=Time, 1=Name, 2=Phone, 3=Date, 4=Time, 5=Svc, 6=Price, 7=Barber, 8=Img, 9=Status, 10=Slip, 11=Hair, 12=Before, 13=After
+    <style>
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-in { animation: fadeIn 0.3s ease-in-out; }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        .animate-progress { animation: progress 1s infinite linear; transform-origin: left; }
+        @keyframes progress { 0% { transform: scaleX(0); } 50% { transform: scaleX(0.5); } 100% { transform: scaleX(1); } }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200 font-sans">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useMemo } = React;
         
-        // เช็คคิวไม่ว่าง (ต้องไม่ถูก Rejected)
-        if (row[3] && row[9] !== "Rejected") {
-          var d = new Date(row[3]);
-          var dateStr = Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd");
-          busySlots.push(dateStr + "|" + row[4] + "|" + row[7]);
-        }
-        
-        // เก็บข้อมูลสำหรับ Admin Dashboard
-        allBookings.push({
-          id: i + 1, // ใช้เลขแถวเป็น ID
-          timestamp: row[0],
-          name: row[1], phone: row[2], date: row[3] ? Utilities.formatDate(new Date(row[3]), Session.getScriptTimeZone(), "yyyy-MM-dd") : "", 
-          time: row[4], service: row[5], price: row[6], barber: row[7], 
-          image: row[8], status: row[9] || 'Pending', 
-          slip: row[10], hairCond: row[11], before: row[12], after: row[13]
-        });
-      }
-      
-      return responseJSON({ shopStatus: shopStatus, busySlots: busySlots, styles: stylesData, allBookings: allBookings });
-    }
+        // --- Embedded Icons (Complete Set) ---
+        const IconBase = ({ children, ...props }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>{children}</svg>
+        );
+        const Icons = {
+            Calendar: (p) => <IconBase {...p}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></IconBase>,
+            Clock: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></IconBase>,
+            Scissors: (p) => <IconBase {...p}><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" x2="8.12" y1="4" y2="15.88"/><line x1="14.47" x2="20" y1="14.48" y2="20"/><line x1="8.12" x2="12" y1="8.12" y2="12"/></IconBase>,
+            User: (p) => <IconBase {...p}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></IconBase>,
+            Phone: (p) => <IconBase {...p}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></IconBase>,
+            CheckCircle: (p) => <IconBase {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></IconBase>,
+            AlertCircle: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></IconBase>,
+            Loader2: (p) => <IconBase {...p}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></IconBase>,
+            Settings: (p) => <IconBase {...p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></IconBase>,
+            Lock: (p) => <IconBase {...p}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></IconBase>,
+            Edit3: (p) => <IconBase {...p}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></IconBase>,
+            Plus: (p) => <IconBase {...p}><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></IconBase>,
+            Trash2: (p) => <IconBase {...p}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></IconBase>,
+            ImageIcon: (p) => <IconBase {...p}><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></IconBase>,
+            X: (p) => <IconBase {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></IconBase>,
+            Search: (p) => <IconBase {...p}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></IconBase>,
+            Power: (p) => <IconBase {...p}><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" x2="12" y1="2" y2="12"/></IconBase>,
+            RefreshCw: (p) => <IconBase {...p}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></IconBase>,
+            ChevronDown: (p) => <IconBase {...p}><path d="m6 9 6 6 6-6"/></IconBase>,
+            ChevronUp: (p) => <IconBase {...p}><path d="m18 15-6-6-6 6"/></IconBase>,
+            Upload: (p) => <IconBase {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></IconBase>,
+            Save: (p) => <IconBase {...p}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></IconBase>,
+            List: (p) => <IconBase {...p}><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></IconBase>,
+            FileText: (p) => <IconBase {...p}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></IconBase>,
+            BarChart: (p) => <IconBase {...p}><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></IconBase>,
+            Camera: (p) => <IconBase {...p}><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></IconBase>
+        };
 
-    // --- 2. จองคิว (Booking) ---
-    if (action == "booking") {
-      // ตรวจสอบสถานะร้าน
-      var settingsRaw = settingSheet.getDataRange().getValues();
-      var currentStatus = "OPEN";
-      for(var k=0; k<settingsRaw.length; k++) { if(settingsRaw[k][0] == "SHOP_STATUS") currentStatus = settingsRaw[k][1]; }
-      if (currentStatus === "CLOSED") return responseJSON({ result: "error", message: "ร้านปิดรับคิวชั่วคราว" });
+        const { Calendar, Clock, Scissors, User, Phone, CheckCircle, AlertCircle, Loader2, Settings, Lock, Edit3, Plus, Trash2, ImageIcon, X, Search, Power, RefreshCw, ChevronDown, ChevronUp, Upload, Save, List, FileText, BarChart, Camera } = Icons;
 
-      // ตรวจสอบคิวซ้ำ
-      if (e.parameter.barber !== "ช่างท่านไหนก็ได้") {
-        var data = bookingSheet.getDataRange().getValues();
-        for (var i = 1; i < data.length; i++) {
-          if (data[i][3] && data[i][9] !== "Rejected") {
-            var dateStr = Utilities.formatDate(new Date(data[i][3]), Session.getScriptTimeZone(), "yyyy-MM-dd");
-            if (dateStr == e.parameter.date && data[i][4] == e.parameter.time && data[i][7] == e.parameter.barber) {
-              return responseJSON({ result: "error", message: "เสียใจด้วย คิวนี้เพิ่งถูกจองไป" });
-            }
-          }
-        }
-      }
+        // --- Config & Helpers ---
+        const FIXED_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxSRp5ZLrKOoV4t5EMkhfEYDPn3At51bMCypBNt0A99lAIDrnF7oSHExwrTH88jlA6j/exec";
+        const ALL_BARBERS = ["ช่างบิว (Master)", "ช่างเอก (Senior)", "ช่างนนท์ (Junior)"];
+        const TIME_SLOTS = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
 
-      // บันทึก (14 Columns)
-      bookingSheet.appendRow([
-        new Date(),                 // 1. Timestamp
-        e.parameter.name,           // 2. Name
-        e.parameter.phone,          // 3. Phone
-        e.parameter.date,           // 4. Date
-        e.parameter.time,           // 5. Time
-        e.parameter.service,        // 6. Service
-        e.parameter.price,          // 7. Price
-        e.parameter.barber,         // 8. Barber
-        e.parameter.imageUrl || "", // 9. Menu Image
-        "Pending",                  // 10. Status (Default)
-        e.parameter.slipUrl || "",  // 11. Slip URL
-        "",                         // 12. Hair Condition
-        "",                         // 13. Before
-        ""                          // 14. After
-      ]);
-      return responseJSON({ result: "success" });
-    }
+        const getDisplayImageUrl = (url) => {
+            if (!url) return '';
+            try {
+                if (url.includes('drive.google.com') && url.includes('id=')) {
+                    const idMatch = url.match(/id=([^&]+)/) || url.match(/\/d\/([^/]+)/);
+                    if (idMatch) return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1000`;
+                }
+            } catch (e) { return ''; }
+            return url;
+        };
 
-    // --- 3. อัปเดตข้อมูล (Update Booking) ---
-    if (action == "updateBooking") {
-      var r = parseInt(e.parameter.rowIndex);
-      if (r > 1) { // ต้องไม่แก้ Header
-        if(e.parameter.name) bookingSheet.getRange(r, 2).setValue(e.parameter.name);
-        if(e.parameter.phone) bookingSheet.getRange(r, 3).setValue(e.parameter.phone);
-        if(e.parameter.date) bookingSheet.getRange(r, 4).setValue(e.parameter.date);
-        if(e.parameter.time) bookingSheet.getRange(r, 5).setValue(e.parameter.time);
-        if(e.parameter.barber) bookingSheet.getRange(r, 8).setValue(e.parameter.barber);
-        if(e.parameter.status) bookingSheet.getRange(r, 10).setValue(e.parameter.status);
-        if(e.parameter.hairCond) bookingSheet.getRange(r, 12).setValue(e.parameter.hairCond);
-        if(e.parameter.beforeImg) bookingSheet.getRange(r, 13).setValue(e.parameter.beforeImg);
-        if(e.parameter.afterImg) bookingSheet.getRange(r, 14).setValue(e.parameter.afterImg);
-        return responseJSON({ result: "success" });
-      }
-      return responseJSON({ result: "error", message: "Invalid Row" });
-    }
+        // --- Sub-Components ---
 
-    // --- 4. อัปโหลดรูป (Upload Image) ---
-    if (action == "uploadImage") {
-      var decoded = Utilities.base64Decode(e.parameter.fileData);
-      var blob = Utilities.newBlob(decoded, e.parameter.mimeType, e.parameter.fileName);
-      var folder = DriveApp.getFolderById(FOLDER_ID);
-      var file = folder.createFile(blob);
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      return responseJSON({ result: "success", url: "https://drive.google.com/uc?export=view&id=" + file.getId() });
-    }
+        const LiveQueueStatus = ({ selectedDate, busySlots }) => {
+            if (!selectedDate) return null;
+            const todaysBookings = busySlots.filter(s => s.startsWith(selectedDate));
+            const slotsByTime = {};
+            todaysBookings.forEach(s => {
+                const parts = s.split('|');
+                const time = parts[1];
+                const barber = parts[2];
+                if (!slotsByTime[time]) slotsByTime[time] = [];
+                slotsByTime[time].push(barber);
+            });
 
-    // --- 5. บันทึก Settings (Toggle Status / Save Styles) ---
-    if (action == "toggleStatus") {
-       saveSettingValue(settingSheet, "SHOP_STATUS", e.parameter.status);
-       return responseJSON({result:"success"});
-    }
-    if (action == "saveStyles") {
-       saveSettingValue(settingSheet, "STYLES_DATA", e.parameter.styles);
-       return responseJSON({result:"success"});
-    }
-    
-    // --- 6. เช็คคิวลูกค้า (Check Status) ---
-    if (action == "checkBooking") {
-       // ใช้ Logic เดียวกับ getData แล้ว Filter ที่ Frontend หรือจะ Filter ที่นี่ก็ได้
-       // เพื่อความง่าย ให้ Frontend ใช้ getData แล้ว filter เอง หรือจะเขียนแยกก็ได้
-       // ในที่นี้เราจะให้ Frontend ใช้ getData จัดการ
-       return responseJSON({ result: "use_getData" });
-    }
+            return (
+                <div className="mt-6 bg-slate-800 p-4 rounded-xl border border-slate-700 animate-in">
+                    <h3 className="text-yellow-500 font-bold mb-3 flex items-center gap-2 text-sm">
+                        <List size={16}/> สถานะคิวประจำวันที่ {selectedDate}
+                    </h3>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        {TIME_SLOTS.map(t => {
+                            const busyBarbers = slotsByTime[t] || [];
+                            const isFull = busyBarbers.length >= ALL_BARBERS.length;
+                            return (
+                                <div key={t} className={`flex justify-between items-center p-2 rounded text-xs border ${isFull ? 'bg-red-900/20 border-red-900/50' : 'bg-slate-900/50 border-slate-800'}`}>
+                                    <span className="font-bold w-12 text-slate-400">{t} น.</span>
+                                    <div className="flex-1 px-2">
+                                        {busyBarbers.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1">
+                                                {busyBarbers.map((b, i) => (
+                                                    <span key={i} className="bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-[4px] text-[10px] truncate max-w-[100px]">{b}</span>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="text-green-500/50 italic">ว่างทุกท่าน</span>
+                                        )}
+                                    </div>
+                                    <div className={`w-2 h-2 rounded-full ${isFull ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
 
-    // --- 7. อัพโหลดรูปทรงผมใหม่ (New Hairstyle Image) ---
-    if (action == "uploadHairstyleImage") {
-      var decoded = Utilities.base64Decode(e.parameter.fileData);
-      var blob = Utilities.newBlob(decoded, e.parameter.mimeType, e.parameter.fileName);
-      var hairstyleFolder = getHairstyleFolder();
-      var file = hairstyleFolder.createFile(blob);
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      var imageUrl = "https://drive.google.com/uc?export=view&id=" + file.getId();
-      var thumbnailUrl = "https://drive.google.com/thumbnail?id=" + file.getId() + "&sz=w1000";
-      return responseJSON({ 
-        result: "success", 
-        url: imageUrl, 
-        thumbnailUrl: thumbnailUrl,
-        fileId: file.getId(),
-        fileName: file.getName()
-      });
-    }
+        const AdminDashboard = ({ allBookings }) => {
+            const stats = useMemo(() => {
+                if (!allBookings) return { income: 0, count: 0, byBarber: {} };
+                const validBookings = allBookings.filter(b => b.status === 'Completed' || b.status === 'Approved');
+                const income = validBookings.reduce((sum, b) => sum + (parseInt(b.price) || 0), 0);
+                const byBarber = {};
+                ALL_BARBERS.forEach(b => byBarber[b] = 0);
+                validBookings.forEach(b => { if(byBarber[b] !== undefined) byBarber[b]++; });
+                return { income, count: validBookings.length, byBarber };
+            }, [allBookings]);
 
-    // --- 8. ดึงรายการรูปทรงผมทั้งหมด (Get All Hairstyle Images) ---
-    if (action == "getHairstyleImages") {
-      var hairstyleFolder = getHairstyleFolder();
-      var files = hairstyleFolder.getFiles();
-      var images = [];
-      while (files.hasNext()) {
-        var file = files.next();
-        images.push({
-          id: file.getId(),
-          name: file.getName(),
-          url: "https://drive.google.com/uc?export=view&id=" + file.getId(),
-          thumbnailUrl: "https://drive.google.com/thumbnail?id=" + file.getId() + "&sz=w1000",
-          created: file.getDateCreated()
-        });
-      }
-      images.sort(function(a, b) { return b.created - a.created; });
-      return responseJSON({ result: "success", images: images, count: images.length });
-    }
+            const maxVal = Math.max(...Object.values(stats.byBarber), 1);
 
-    // --- 9. ลบรูปทรงผม (Delete Hairstyle Image) ---
-    if (action == "deleteHairstyleImage") {
-      var fileId = e.parameter.fileId;
-      if (!fileId) return responseJSON({ result: "error", message: "Missing fileId" });
-      try {
-        var file = DriveApp.getFileById(fileId);
-        file.setTrashed(true);
-        return responseJSON({ result: "success", message: "Image deleted" });
-      } catch(err) {
-        return responseJSON({ result: "error", message: "File not found or cannot delete" });
-      }
-    }
+            return (
+                <div className="space-y-4 animate-in">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-slate-800 p-4 rounded-xl border border-green-500/30">
+                            <div className="text-slate-400 text-xs">รายได้รวม</div>
+                            <div className="text-2xl font-bold text-green-400">฿{stats.income.toLocaleString()}</div>
+                        </div>
+                        <div className="bg-slate-800 p-4 rounded-xl border border-blue-500/30">
+                            <div className="text-slate-400 text-xs">จำนวนคิว</div>
+                            <div className="text-2xl font-bold text-blue-400">{stats.count}</div>
+                        </div>
+                    </div>
+                    <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                        <h4 className="text-white font-bold mb-3 flex items-center gap-2"><BarChart size={16}/> สถิติช่าง</h4>
+                        <div className="space-y-3">
+                            {Object.entries(stats.byBarber).map(([name, count]) => (
+                                <div key={name}>
+                                    <div className="flex justify-between text-xs text-slate-300 mb-1">
+                                        <span>{name}</span><span>{count} คิว</span>
+                                    </div>
+                                    <div className="w-full bg-slate-700 rounded-full h-2">
+                                        <div className="bg-yellow-500 h-2 rounded-full transition-all duration-500" style={{width: `${(count/maxVal)*100}%`}}></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
 
-    return responseJSON({ result: "error", message: "Invalid Action" });
+        const AdminLogin = ({ onLogin, onCancel }) => {
+            const [pass, setPass] = useState('');
+            const [error, setError] = useState('');
+            return (
+                <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+                    <div className="bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-sm border border-slate-700 animate-in">
+                        <h2 className="text-xl font-bold text-yellow-500 mb-4 flex items-center gap-2"><Lock size={20}/> Admin Login</h2>
+                        <form onSubmit={(e) => { 
+                            e.preventDefault(); 
+                            if (!onLogin(pass)) setError('รหัสผ่านไม่ถูกต้อง');
+                            else setError('');
+                        }} className="space-y-4">
+                            <input type="password" placeholder="รหัสผ่าน (1234)" value={pass} onChange={e => {setPass(e.target.value); setError('');}} className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white focus:border-yellow-500 outline-none transition-colors"/>
+                            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+                            <div className="flex gap-2">
+                                <button type="submit" className="flex-1 bg-yellow-500 text-slate-900 py-2 rounded font-bold hover:bg-yellow-400 transition-colors">เข้าสู่ระบบ</button>
+                                <button type="button" onClick={onCancel} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">ยกเลิก</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
 
-  } catch (err) {
-    return responseJSON({ result: "error", message: err.toString() });
-  } finally {
-    lock.releaseLock();
-  }
-}
+        const AdminPanel = ({ 
+            shopStatus, toggleShopStatus, fetchData, loadingData, allBookings,
+            setEditingBooking, editingBooking, handleSaveEditBooking, 
+            styles, handleAddStyle, handleUpdateStyle, handleDeleteStyle, handleImageUpload, saveStylesToServer, uploadingId, onBack,
+            hairstyleImages, uploadingHairstyle, handleHairstyleImageUpload, deleteHairstyleImage, fetchHairstyleImages
+        }) => {
+            const [tab, setTab] = useState('dashboard');
+            const [filterStatus, setFilterStatus] = useState('All');
+            const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
-// Helper บันทึกค่าลง Settings
-function saveSettingValue(sheet, key, value) {
-  var data = sheet.getDataRange().getValues();
-  for(var i=0; i<data.length; i++){ 
-    if(data[i][0] == key){ 
-      sheet.getRange(i+1, 2).setValue(value); 
-      return;
-    }
-  }
-  sheet.appendRow([key, value]);
-}
+            useEffect(() => { const i = setInterval(() => fetchData(false, false), 10000); return () => clearInterval(i); }, [fetchData]);
 
-// สร้าง Sheet ถ้ายังไม่มี
-function initSheets() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
-  if (!ss.getSheetByName(SHEET_NAME_SETTINGS)) {
-    var s = ss.insertSheet(SHEET_NAME_SETTINGS);
-    s.appendRow(["Key", "Value"]); s.appendRow(["SHOP_STATUS", "OPEN"]); s.appendRow(["STYLES_DATA", "[]"]);
-  }
-  if (!ss.getSheetByName(SHEET_NAME_BOOKINGS)) {
-    var s = ss.insertSheet(SHEET_NAME_BOOKINGS);
-    s.appendRow(["Timestamp", "Name", "Phone", "Date", "Time", "Service", "Price", "Barber", "ImageURL", "Status", "SlipURL", "HairCondition", "BeforeImg", "AfterImg"]);
-  }
-}
+            // Filter logic
+            const filteredBookings = useMemo(() => {
+                if(!allBookings) return [];
+                let res = [...allBookings].sort((a,b) => b.id - a.id);
+                if(filterStatus !== 'All') res = res.filter(b => b.status === filterStatus);
+                return res;
+            }, [allBookings, filterStatus]);
 
-function responseJSON(data) {
-  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
-}
+            const getStatusColor = (s) => {
+                if(s === 'Approved') return 'text-green-400 bg-green-900/30';
+                if(s === 'Rejected') return 'text-red-400 bg-red-900/30';
+                if(s === 'Completed') return 'text-blue-400 bg-blue-900/30';
+                return 'text-yellow-400 bg-yellow-900/30'; // Pending
+            };
 
-// Helper: ดึงหรือสร้าง Folder สำหรับเก็บรูปทรงผม
-function getHairstyleFolder() {
-  var mainFolder = DriveApp.getFolderById(FOLDER_ID);
-  var folderName = "BEW_Hairstyles";
-  var folders = mainFolder.getFoldersByName(folderName);
-  
-  if (folders.hasNext()) {
-    return folders.next();
-  } else {
-    return mainFolder.createFolder(folderName);
-  }
-}
+            return (
+                <div className="min-h-screen bg-slate-900 text-slate-200 font-sans pb-20 animate-in">
+                    <div className="bg-slate-800 p-4 border-b border-slate-700 sticky top-0 z-20 flex justify-between items-center shadow-lg">
+                        <h1 className="font-bold text-yellow-500 flex items-center gap-2"><Settings size={20}/> จัดการร้าน</h1>
+                        <button onClick={onBack} className="text-sm bg-slate-700 px-3 py-1 rounded hover:bg-slate-600 text-white">กลับหน้าร้าน</button>
+                    </div>
+                    
+                    <div className="flex p-2 bg-slate-800 gap-1 overflow-x-auto">
+                        {['dashboard', 'queue', 'menu', 'images'].map(t => (
+                            <button key={t} onClick={() => setTab(t)} className={`flex-1 py-2 text-xs font-bold uppercase rounded ${tab === t ? 'bg-yellow-500 text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
+                                {t === 'dashboard' ? 'แดชบอร์ด' : t === 'queue' ? 'รายการจอง' : t === 'menu' ? 'เมนู/ร้าน' : 'รูปทรงผม'}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="max-w-3xl mx-auto p-4 space-y-6">
+                        
+                        {tab === 'dashboard' && <AdminDashboard allBookings={allBookings} />}
+
+                        {tab === 'menu' && (
+                            <div className="space-y-6 animate-in">
+                                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
+                                    <div><h3 className="font-bold text-white">สถานะร้าน</h3><p className={`text-xs ${shopStatus==='OPEN'?'text-green-500':'text-red-500'}`}>{shopStatus==='OPEN'?'🟢 เปิด':'🔴 ปิด'}</p></div>
+                                    <button onClick={toggleShopStatus} className="bg-slate-700 px-4 py-2 rounded text-xs">สลับสถานะ</button>
+                                </div>
+                                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                                    <div className="flex justify-between mb-4"><h3 className="font-bold text-white">จัดการทรงผม</h3>
+                                    <div className="flex gap-2"><button onClick={handleAddStyle} className="bg-green-600/20 text-green-500 px-2 py-1 rounded text-xs">+ เพิ่ม</button><button onClick={saveStylesToServer} className="bg-blue-600/20 text-blue-500 px-2 py-1 rounded text-xs">บันทึก</button></div></div>
+                                    <div className="grid gap-4">
+                                        {styles.map(s => (
+                                            <div key={s.id} className="bg-slate-900 p-3 rounded border border-slate-700 flex gap-3 relative">
+                                                <div className="w-20 h-20 bg-black rounded overflow-hidden shrink-0 relative">
+                                                    {s.image && <img src={getDisplayImageUrl(s.image)} className="w-full h-full object-cover" onError={e=>e.target.style.display='none'}/>}
+                                                    <label className="absolute inset-0 flex items-center justify-center cursor-pointer bg-black/50 opacity-0 hover:opacity-100 transition-opacity"><Upload size={16}/><input type="file" className="hidden" onChange={e=>handleImageUpload(e, s.id)}/></label>
+                                                    {uploadingId === s.id && <div className="absolute inset-0 bg-black/80 flex items-center justify-center"><Loader2 className="animate-spin text-yellow-500"/></div>}
+                                                </div>
+                                                <div className="flex-1 space-y-2 min-w-0">
+                                                    <input value={s.name} onChange={e=>handleUpdateStyle(s.id,'name',e.target.value)} className="w-full bg-transparent border-b border-slate-700 text-sm outline-none" placeholder="ชื่อ"/>
+                                                    <input type="number" value={s.price} onChange={e=>handleUpdateStyle(s.id,'price',e.target.value)} className="w-full bg-transparent border-b border-slate-700 text-sm outline-none text-yellow-500" placeholder="ราคา"/>
+                                                    <input value={s.image} readOnly className="w-full bg-transparent border-b border-slate-700 text-[10px] text-slate-500 outline-none truncate"/>
+                                                </div>
+                                                
+                                                {/* Delete Button */}
+                                                <div className="flex flex-col justify-start">
+                                                    {confirmDeleteId === s.id ? (
+                                                        <div className="flex flex-col gap-1 z-20 absolute top-2 right-2 bg-slate-800 p-2 rounded shadow-lg border border-slate-600">
+                                                            <button onClick={() => { handleDeleteStyle(s.id); setConfirmDeleteId(null); }} className="bg-red-600 text-white text-[10px] px-2 py-1 rounded">ยืนยัน</button>
+                                                            <button onClick={() => setConfirmDeleteId(null)} className="bg-slate-600 text-white text-[10px] px-2 py-1 rounded">ยกเลิก</button>
+                                                        </div>
+                                                    ) : (
+                                                        <button onClick={() => setConfirmDeleteId(s.id)} className="text-slate-600 hover:text-red-500 p-1"><Trash2 size={18}/></button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {tab === 'images' && (
+                            <div className="space-y-6 animate-in">
+                                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h3 className="font-bold text-white flex items-center gap-2">
+                                            <ImageIcon size={18}/> คลังรูปทรงผม ({hairstyleImages.length})
+                                        </h3>
+                                        <label className={`px-4 py-2 rounded text-xs font-bold flex items-center gap-2 cursor-pointer ${uploadingHairstyle ? 'bg-slate-600' : 'bg-green-600 hover:bg-green-500 text-white'}`}>
+                                            {uploadingHairstyle ? <><Loader2 className="animate-spin" size={14}/> กำลังอัพโหลด...</> : <><Plus size={14}/> เพิ่มรูปใหม่</>}
+                                            <input type="file" className="hidden" accept="image/*" onChange={handleHairstyleImageUpload} disabled={uploadingHairstyle}/>
+                                        </label>
+                                    </div>
+                                    
+                                    {hairstyleImages.length === 0 ? (
+                                        <div className="text-center py-8 text-slate-500">
+                                            <ImageIcon size={48} className="mx-auto mb-2 opacity-30"/>
+                                            <p>ยังไม่มีรูปทรงผม</p>
+                                            <p className="text-xs mt-1">คลิก "เพิ่มรูปใหม่" เพื่ออัพโหลด</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                            {hairstyleImages.map((img, idx) => (
+                                                <div key={img.id} className="bg-slate-900 rounded-lg overflow-hidden border border-slate-700 group relative">
+                                                    <div className="aspect-square bg-black relative">
+                                                        <img src={img.thumbnailUrl} alt={img.name} className="w-full h-full object-cover" onError={e => {e.target.src = img.url;}}/>
+                                                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                                            <a href={img.url} target="_blank" className="bg-white/20 hover:bg-white/30 p-2 rounded-full text-white">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7Z"/></svg>
+                                                            </a>
+                                                            <button onClick={() => deleteHairstyleImage(img.id)} className="bg-red-500/80 hover:bg-red-500 p-2 rounded-full text-white">
+                                                                <Trash2 size={16}/>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="p-2">
+                                                        <p className="text-xs text-slate-300 truncate" title={img.name}>{img.name}</p>
+                                                        <p className="text-[10px] text-slate-500">{new Date(img.created).toLocaleDateString('th-TH')}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    
+                                    <div className="mt-4 p-3 bg-slate-900/50 rounded-lg text-xs text-slate-400">
+                                        <p className="font-bold text-slate-300 mb-1">💡 วิธีใช้งาน:</p>
+                                        <ul className="list-disc list-inside space-y-1">
+                                            <li>อัพโหลดรูปทรงผมที่ต้องการเก็บไว้ในคลัง</li>
+                                            <li>รูปจะถูกเก็บในโฟลเดอร์ BEW_Hairstyles บน Google Drive</li>
+                                            <li>สามารถนำ URL ไปใช้ในหน้าจัดการทรงผมได้</li>
+                                            <li>คลิกที่รูปเพื่อดูขนาดเต็ม หรือลบรูปที่ไม่ต้องการ</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {tab === 'queue' && (
+                            <div className="space-y-4 animate-in">
+                                <div className="flex gap-2 overflow-x-auto pb-2">
+                                    {['All', 'Pending', 'Approved', 'Completed', 'Rejected'].map(s => (
+                                        <button key={s} onClick={() => setFilterStatus(s)} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${filterStatus === s ? 'bg-yellow-500 text-slate-900 font-bold' : 'bg-slate-800 text-slate-400'}`}>{s}</button>
+                                    ))}
+                                </div>
+                                <div className="space-y-2">
+                                    {filteredBookings.map((b) => (
+                                        <div key={b.id} className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-start cursor-pointer hover:border-yellow-500/50 transition-colors" onClick={() => setEditingBooking(b)}>
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${getStatusColor(b.status)}`}>{b.status}</span>
+                                                    <span className="text-slate-400 text-xs">{b.date} {b.time}</span>
+                                                </div>
+                                                <div className="font-bold text-white">{b.name} <span className="text-slate-500 font-normal">({b.phone})</span></div>
+                                                <div className="text-xs text-slate-400">{b.service} - {b.barber}</div>
+                                            </div>
+                                            {b.slip && <div className="text-green-500"><FileText size={16}/></div>}
+                                        </div>
+                                    ))}
+                                    {filteredBookings.length === 0 && <p className="text-center text-slate-500 py-8">ไม่พบรายการ</p>}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Edit Modal */}
+                        {editingBooking && (
+                            <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
+                                <div className="bg-slate-900 p-6 rounded-xl w-full max-w-md border border-yellow-500 shadow-2xl animate-in my-8">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <h3 className="font-bold text-xl text-white">จัดการคิว #{editingBooking.id}</h3>
+                                        <button onClick={() => setEditingBooking(null)}><X size={24}/></button>
+                                    </div>
+                                    
+                                    <form onSubmit={handleSaveEditBooking} className="space-y-6">
+                                        <div className="bg-slate-800 p-4 rounded-lg">
+                                            <label className="text-xs text-slate-400 block mb-2">สถานะ (Status)</label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {['Pending', 'Approved', 'Rejected', 'Completed'].map(s => (
+                                                    <button type="button" key={s} onClick={() => setEditingBooking({...editingBooking, status: s})}
+                                                        className={`py-2 px-3 rounded text-xs font-bold border transition-colors ${editingBooking.status === s ? getStatusColor(s) + ' border-current' : 'border-slate-700 text-slate-500'}`}>
+                                                        {s}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {editingBooking.slip ? (
+                                            <div className="bg-slate-800 p-4 rounded-lg">
+                                                <label className="text-xs text-slate-400 block mb-2 flex items-center gap-2"><FileText size={14}/> หลักฐานการโอนเงิน</label>
+                                                <a href={getDisplayImageUrl(editingBooking.slip)} target="_blank" className="block relative aspect-video bg-black rounded overflow-hidden group">
+                                                    <img src={getDisplayImageUrl(editingBooking.slip)} className="w-full h-full object-contain" />
+                                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs">คลิกเพื่อดูรูปเต็ม</div>
+                                                </a>
+                                            </div>
+                                        ) : <div className="text-xs text-red-400 bg-red-900/10 p-2 rounded text-center">ลูกค้าไม่ได้แนบสลิป</div>}
+
+                                        <div className="bg-slate-800 p-4 rounded-lg space-y-3">
+                                            <h4 className="text-sm font-bold text-white flex items-center gap-2 border-b border-slate-700 pb-2"><Camera size={16}/> บันทึกหลังการขาย</h4>
+                                            
+                                            <div>
+                                                <label className="text-xs text-slate-400">สภาพผม</label>
+                                                <select className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white mt-1" 
+                                                    value={editingBooking.hairCond || ''} onChange={e => setEditingBooking({...editingBooking, hairCond: e.target.value})}>
+                                                    <option value="">- ระบุสภาพผม -</option>
+                                                    <option value="Normal">ปกติ</option>
+                                                    <option value="Dry">แห้งเสีย</option>
+                                                    <option value="Oily">มัน</option>
+                                                    <option value="Thin">บาง</option>
+                                                </select>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {[
+                                                    { key: 'beforeImg', label: 'Before' }, 
+                                                    { key: 'afterImg', label: 'After' }
+                                                ].map(field => (
+                                                    <div key={field.key}>
+                                                        <label className="text-[10px] text-slate-400 mb-1 block">{field.label}</label>
+                                                        <div className="aspect-square bg-slate-900 rounded border border-slate-700 relative flex items-center justify-center overflow-hidden">
+                                                            {editingBooking[field.key] ? 
+                                                                <img src={getDisplayImageUrl(editingBooking[field.key])} className="w-full h-full object-cover"/> : 
+                                                                <Camera size={20} className="text-slate-700"/>
+                                                            }
+                                                            <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 cursor-pointer transition-opacity">
+                                                                <Upload size={16}/><input type="file" className="hidden" onChange={e => handleImageUpload(e, editingBooking.id, (url) => setEditingBooking({...editingBooking, [field.key]: url}))}/>
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <button type="submit" disabled={loadingData} className="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-3 rounded-lg shadow-lg flex justify-center items-center gap-2">
+                                            {loadingData ? <Loader2 className="animate-spin"/> : <Save size={18}/>} บันทึกการเปลี่ยนแปลง
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const CheckStatus = ({ phone, setPhone, onCheck, statusState, myBookings, onBack }) => (
+            <div className="min-h-screen bg-slate-900 text-slate-200 font-sans">
+                <div className="max-w-md mx-auto min-h-screen bg-slate-800 flex flex-col">
+                    <div className="bg-slate-700 p-4 flex items-center gap-4 sticky top-0 z-20"><button onClick={onBack} className="bg-slate-600 p-2 rounded-full hover:bg-slate-500 transition-colors"><X size={16}/></button><h1 className="font-bold text-lg">เช็คสถานะการจอง</h1></div>
+                    <div className="p-6 space-y-6">
+                        <form onSubmit={(e) => { e.preventDefault(); onCheck(); }} className="space-y-4">
+                            <div className="space-y-2"><label className="text-sm text-slate-400">เบอร์โทรศัพท์</label><input type="tel" value={phone} onChange={e => setPhone(e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white text-center text-lg tracking-wider focus:border-yellow-500 outline-none transition-colors" placeholder="08X-XXX-XXXX" required/></div>
+                            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg font-bold flex justify-center items-center gap-2 transition-colors">{statusState === 'loading' ? <Loader2 className="animate-spin"/> : <Search size={20}/>} ค้นหาข้อมูล</button>
+                        </form>
+                        {statusState === 'found' && (
+                            <div className="space-y-4 animate-in">
+                                <h3 className="text-green-400 font-bold flex items-center gap-2"><CheckCircle size={16}/> พบประวัติ ({myBookings.length})</h3>
+                                {myBookings.map((bk, idx) => (
+                                    <div key={idx} className="bg-slate-900 p-4 rounded-lg border-l-4 border-yellow-500 shadow-lg animate-in" style={{animationDelay: `${idx * 0.1}s`}}>
+                                        <div className="flex justify-between items-start mb-2"><span className="text-yellow-500 font-bold text-lg">{bk.time} น.</span><span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">{bk.date}</span></div>
+                                        <div className="text-sm text-slate-300 space-y-1"><p>✂️ {bk.service}</p><p>👨‍🦲 {bk.barber}</p></div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {statusState === 'not-found' && <div className="text-center py-8 text-slate-500 bg-slate-900/50 rounded-lg animate-in"><AlertCircle size={40} className="mx-auto mb-2 opacity-50"/><p>ไม่พบข้อมูล</p></div>}
+                    </div>
+                </div>
+            </div>
+        );
+
+        // --- Main App Component ---
+
+        const BarberBookingApp = () => {
+            const defaultStyles = [
+                { id: 1, name: 'Vintage Slick Back', price: 350, image: 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=500&auto=format&fit=crop&q=60' },
+                { id: 2, name: 'Korean Two Block', price: 300, image: 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=500&auto=format&fit=crop&q=60' },
+                { id: 3, name: 'Skin Fade / Undercut', price: 250, image: 'https://images.unsplash.com/photo-1605497788044-5a32c7078486?w=500&auto=format&fit=crop&q=60' },
+                { id: 4, name: 'Mullet Modern', price: 400, image: 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=500&auto=format&fit=crop&q=60' }
+            ];
+
+            const [view, setView] = useState('customer');
+            const [hairstyles, setHairstyles] = useState(defaultStyles);
+            const [shopStatus, setShopStatus] = useState('OPEN');
+            const [busySlots, setBusySlots] = useState([]);
+            const [formData, setFormData] = useState({ name: '', phone: '', date: '', time: '', service: 'ตัดผม', selectedStyle: null, barber: 'ช่างท่านไหนก็ได้' });
+            
+            const [checkPhone, setCheckPhone] = useState('');
+            const [myBookings, setMyBookings] = useState([]);
+            const [checkStatusState, setCheckStatusState] = useState('idle');
+
+            const [adminSearchQuery, setAdminSearchQuery] = useState('');
+            const [adminSearchResults, setAdminSearchResults] = useState([]);
+            const [isSearching, setIsSearching] = useState(false);
+            const [editingBooking, setEditingBooking] = useState(null);
+            
+            const [status, setStatus] = useState('idle');
+            const [message, setMessage] = useState('');
+            const [loadingData, setLoadingData] = useState(false);
+            const [uploadingId, setUploadingId] = useState(null);
+            
+            // For Dashboard
+            const [allBookings, setAllBookings] = useState([]);
+            
+            // For Hairstyle Images (NEW)
+            const [hairstyleImages, setHairstyleImages] = useState([]);
+            const [uploadingHairstyle, setUploadingHairstyle] = useState(false);
+
+            useEffect(() => {
+                const savedStyles = localStorage.getItem('bew_barber_styles');
+                if (savedStyles) { try { setHairstyles(JSON.parse(savedStyles)); } catch (e) {} }
+                fetchData(false);
+            }, []);
+
+            // Auto-Refresh for Customer
+            useEffect(() => {
+                const interval = setInterval(() => { fetchData(false); }, 15000); 
+                return () => clearInterval(interval);
+            }, [fetchData]);
+
+            useEffect(() => { localStorage.setItem('bew_barber_styles', JSON.stringify(hairstyles)); }, [hairstyles]);
+
+            const fetchData = useCallback(async (isManual = false, updateStyles = true) => {
+                setLoadingData(true);
+                try {
+                    const response = await fetch(`${FIXED_SCRIPT_URL}?action=getData`);
+                    const data = await response.json();
+                    if (data.shopStatus) setShopStatus(data.shopStatus);
+                    if (data.busySlots) setBusySlots(data.busySlots);
+                    if (data.allBookings) setAllBookings(data.allBookings);
+                    if (updateStyles && data.styles && Array.isArray(data.styles) && data.styles.length > 0) {
+                        setHairstyles(data.styles);
+                    }
+                    if (isManual) alert("✅ เชื่อมต่อสำเร็จ!");
+                } catch (error) { if (isManual) alert(`❌ เชื่อมต่อล้มเหลว`); } 
+                finally { setLoadingData(false); }
+            }, []);
+
+            // NEW: ดึงรายการรูปทรงผมทั้งหมด
+            const fetchHairstyleImages = useCallback(async () => {
+                try {
+                    const response = await fetch(`${FIXED_SCRIPT_URL}?action=getHairstyleImages`);
+                    const data = await response.json();
+                    if (data.result === "success" && data.images) {
+                        setHairstyleImages(data.images);
+                    }
+                } catch (error) {
+                    console.error("Error fetching hairstyle images:", error);
+                }
+            }, []);
+
+            // NEW: อัพโหลดรูปทรงผมใหม่
+            const handleHairstyleImageUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                setUploadingHairstyle(true);
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = async () => {
+                    const form = new FormData();
+                    form.append('action', 'uploadHairstyleImage');
+                    form.append('fileData', reader.result.split(',')[1]);
+                    form.append('mimeType', file.type);
+                    form.append('fileName', file.name);
+                    
+                    try {
+                        const res = await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form });
+                        const data = await res.json();
+                        if (data.result === 'success') {
+                            await fetchHairstyleImages();
+                            alert('อัพโหลดรูปทรงผมสำเร็จ!');
+                        } else {
+                            alert('อัพโหลดล้มเหลว: ' + data.message);
+                        }
+                    } catch (e) {
+                        alert('อัพโหลดล้มเหลว');
+                    } finally {
+                        setUploadingHairstyle(false);
+                    }
+                };
+            };
+
+            // NEW: ลบรูปทรงผม
+            const deleteHairstyleImage = async (fileId) => {
+                if (!confirm('ยืนยันการลบรูปนี้?')) return;
+                
+                const form = new FormData();
+                form.append('action', 'deleteHairstyleImage');
+                form.append('fileId', fileId);
+                
+                try {
+                    const res = await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form });
+                    const data = await res.json();
+                    if (data.result === 'success') {
+                        await fetchHairstyleImages();
+                        alert('ลบรูปสำเร็จ');
+                    } else {
+                        alert('ลบล้มเหลว: ' + data.message);
+                    }
+                } catch (e) {
+                    alert('ลบล้มเหลว');
+                }
+            };
+
+            // Load hairstyle images on admin view and customer view
+            useEffect(() => {
+                if (view === 'admin' || view === 'customer') {
+                    fetchHairstyleImages();
+                }
+            }, [view, fetchHairstyleImages]);
+
+            // Updated Busy Logic
+            const isSlotBusy = (time) => {
+                if (!formData.date) return false;
+                if (formData.barber !== 'ช่างท่านไหนก็ได้') {
+                    return busySlots.includes(`${formData.date}|${time}|${formData.barber}`);
+                }
+                const busyCount = ALL_BARBERS.filter(b => 
+                    busySlots.includes(`${formData.date}|${time}|${b}`)
+                ).length;
+                return busyCount >= ALL_BARBERS.length;
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (isSlotBusy(formData.time)) { setStatus('error'); setMessage('คิวนี้เต็มแล้วครับ'); return; }
+                setStatus('loading');
+                const formPayload = new FormData();
+                formPayload.append('name', formData.name); formPayload.append('phone', formData.phone);
+                formPayload.append('date', formData.date); formPayload.append('time', formData.time);
+                formPayload.append('service', formData.service); formPayload.append('barber', formData.barber);
+                formPayload.append('price', formData.selectedStyle ? formData.selectedStyle.price : '-');
+                formPayload.append('imageUrl', formData.selectedStyle ? formData.selectedStyle.image : '');
+                formPayload.append('action', 'booking');
+                
+                try {
+                    await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: formPayload, mode: 'no-cors' });
+                    if (formData.barber !== 'ช่างท่านไหนก็ได้') {
+                        setBusySlots(prev => [...prev, `${formData.date}|${formData.time}|${formData.barber}`]);
+                    }
+                    setStatus('success'); setFormData({ ...formData, name: '', phone: '', date: '', time: '' });
+                } catch (error) { setStatus('error'); setMessage('Error connecting'); }
+            };
+
+            const handleAdminLogin = (pass) => {
+                if (pass === '1234') { 
+                    setView('admin'); 
+                    return true; // Success
+                }
+                return false; // Failed
+            };
+
+            const toggleShopStatus = async () => {
+                const newStatus = shopStatus === 'OPEN' ? 'CLOSED' : 'OPEN';
+                setShopStatus(newStatus);
+                const form = new FormData(); form.append('action', 'toggleStatus'); form.append('status', newStatus);
+                try { await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form, mode: 'no-cors' }); } catch(e){}
+            };
+
+            const handleAdminSearch = async (e) => {
+                e.preventDefault(); setIsSearching(true);
+                try {
+                    const res = await fetch(`${FIXED_SCRIPT_URL}?action=searchAll&query=${adminSearchQuery}`);
+                    const data = await res.json(); setAdminSearchResults(data.results || []);
+                } catch(e) { alert('Error'); } finally { setIsSearching(false); }
+            };
+
+            const handleSaveEditBooking = async (e) => {
+                e.preventDefault(); if(!editingBooking) return;
+                const form = new FormData();
+                form.append('action', 'updateBooking'); form.append('rowIndex', editingBooking.rowIndex);
+                form.append('name', editingBooking.name); form.append('phone', editingBooking.phone);
+                form.append('date', editingBooking.date); form.append('time', editingBooking.time);
+                form.append('barber', editingBooking.barber);
+                try {
+                    await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form, mode: 'no-cors' });
+                    alert('แก้ไขสำเร็จ'); setEditingBooking(null); fetchData(false);
+                } catch(e) { alert('Error'); }
+            };
+
+            const handleImageUpload = async (e, id) => {
+                const file = e.target.files[0]; if(!file) return; setUploadingId(id);
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = async () => {
+                    const form = new FormData();
+                    form.append('action', 'uploadImage'); form.append('fileData', reader.result.split(',')[1]);
+                    form.append('mimeType', file.type); form.append('fileName', file.name);
+                    try {
+                        const res = await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form });
+                        const data = await res.json();
+                        if(data.result === 'success') {
+                            setHairstyles(prev => prev.map(s => s.id === id ? { ...s, image: data.url } : s));
+                            alert('อัปโหลดสำเร็จ! อย่าลืมกด "บันทึก Server"');
+                        }
+                    } catch(e) { alert('Upload failed'); } finally { setUploadingId(null); }
+                };
+            };
+
+            const checkMyBooking = async () => {
+                setCheckStatusState('loading');
+                try {
+                    const res = await fetch(`${FIXED_SCRIPT_URL}?action=checkBooking&phone=${checkPhone}`);
+                    const data = await res.json();
+                    if(data.bookings?.length) { setMyBookings(data.bookings); setCheckStatusState('found'); } else { setCheckStatusState('not-found'); }
+                } catch(e) { setCheckStatusState('error'); }
+            };
+
+            if (view === 'admin-login') return <AdminLogin onLogin={handleAdminLogin} onCancel={() => setView('customer')} />;
+            if (view === 'admin') return <AdminPanel 
+                shopStatus={shopStatus} toggleShopStatus={toggleShopStatus} fetchData={fetchData} loadingData={loadingData}
+                adminSearchQuery={adminSearchQuery} setAdminSearchQuery={setAdminSearchQuery} handleAdminSearch={handleAdminSearch}
+                isSearching={isSearching} adminSearchResults={adminSearchResults} setEditingBooking={setEditingBooking} editingBooking={editingBooking}
+                handleSaveEditBooking={handleSaveEditBooking} styles={hairstyles} 
+                handleAddStyle={() => setHairstyles([...hairstyles, { id: Date.now() + Math.random(), name: 'แบบทรงใหม่', price: 300, image: 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=500' }])}
+                handleUpdateStyle={(id, f, v) => setHairstyles(prev => prev.map(s => s.id === id ? { ...s, [f]: v } : s))}
+                handleDeleteStyle={(id) => {
+                    // Custom Confirm Logic is handled inside AdminPanel now
+                    setHairstyles(prev => prev.filter(s => s.id !== id));
+                }}
+                handleImageUpload={handleImageUpload} uploadingId={uploadingId}
+                saveStylesToServer={async () => { 
+                    const form = new FormData(); form.append('action', 'saveStyles'); form.append('styles', JSON.stringify(hairstyles));
+                    try { await fetch(FIXED_SCRIPT_URL, {method:'POST', body: form, mode: 'no-cors'}); alert('บันทึกข้อมูลลง Server เรียบร้อย!'); } catch(e){}
+                }}
+                onBack={() => setView('customer')}
+                allBookings={allBookings}
+                hairstyleImages={hairstyleImages}
+                uploadingHairstyle={uploadingHairstyle}
+                handleHairstyleImageUpload={handleHairstyleImageUpload}
+                deleteHairstyleImage={deleteHairstyleImage}
+                fetchHairstyleImages={fetchHairstyleImages}
+            />;
+            if (view === 'check-status') return <CheckStatus phone={checkPhone} setPhone={setCheckPhone} onCheck={checkMyBooking} statusState={checkStatusState} myBookings={myBookings} onBack={() => setView('customer')} />;
+
+            return (
+                <div className="min-h-screen bg-slate-900 text-slate-200 font-sans selection:bg-yellow-500 selection:text-slate-900">
+                    <div className="max-w-md mx-auto min-h-screen flex flex-col relative bg-slate-800 shadow-2xl overflow-hidden">
+                        <div className="bg-gradient-to-r from-yellow-600 to-yellow-500 p-6 text-slate-900 relative">
+                            <div className="flex justify-between items-start">
+                                <div><h1 className="text-3xl font-bold tracking-tighter">BEW BARBER</h1><div className="flex items-center gap-2 mt-1">{shopStatus === 'OPEN' ? <span className="bg-green-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 animate-pulse"><span className="w-2 h-2 bg-white rounded-full"></span> OPEN</span> : <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1"><Power size={8}/> CLOSED</span>}<p className="font-medium opacity-90 text-sm">จองคิวตัดผมออนไลน์</p></div></div>
+                                <div className="flex gap-2"><button onClick={() => setView('check-status')} className="bg-slate-900/10 hover:bg-slate-900/20 p-2 rounded-full transition-colors" title="เช็คคิว"><Search size={18} /></button><button onClick={() => setView('admin-login')} className="bg-slate-900/10 hover:bg-slate-900/20 p-2 rounded-full transition-colors"><Lock size={18} /></button></div>
+                            </div>
+                        </div>
+                        {shopStatus === 'CLOSED' && <div className="absolute inset-0 z-50 bg-slate-900/90 flex flex-col items-center justify-center p-8 text-center backdrop-blur-sm animate-in"><div className="bg-slate-800 p-8 rounded-2xl border border-red-500/30 shadow-2xl max-w-xs w-full"><Power size={48} className="text-red-500 mx-auto mb-4"/><h2 className="text-2xl font-bold text-white mb-2">ร้านปิดรับคิว</h2><button onClick={() => setView('check-status')} className="w-full bg-slate-700 py-2 rounded-lg text-sm hover:bg-slate-600 transition-colors">เช็คคิว</button></div></div>}
+                        <div className="flex-1 overflow-y-auto pb-8 relative">
+                            {loadingData && <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500/20 overflow-hidden z-10"><div className="w-full h-full bg-yellow-500 animate-progress origin-left" style={{animation: 'progress 1s infinite linear'}}></div></div>}
+                            {status === 'success' ? (
+                               <div className="flex flex-col items-center justify-center h-full text-center py-10 animate-in px-6"><div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mb-4 text-green-500"><CheckCircle size={48} /></div><h2 className="text-2xl font-bold text-white mb-2">จองสำเร็จ!</h2><p className="text-slate-400 mb-6">{formData.date} {formData.time}</p><div className="flex gap-3"><button onClick={() => setStatus('idle')} className="bg-slate-700 hover:bg-slate-600 text-white py-2 px-6 rounded-full transition-colors">จองเพิ่ม</button></div></div>
+                            ) : (
+                                <div className="p-6 space-y-8 animate-in">
+                                    <section><h2 className="text-yellow-500 font-bold mb-4 text-sm flex items-center gap-2">🔥 ทรงผมยอดฮิต</h2><div className="flex gap-3 overflow-x-auto pb-4 snap-x">{hairstyles.map((style) => (<div key={style.id} onClick={() => setFormData(p=>({...p, selectedStyle: style, service: `ทรง ${style.name}`}))} className={`snap-center shrink-0 w-32 relative group cursor-pointer rounded-xl overflow-hidden border-2 transition-all ${formData.selectedStyle?.id === style.id ? 'border-yellow-500 scale-95' : 'border-transparent'}`}><img src={getDisplayImageUrl(style.image)} className="w-full h-40 object-cover" referrerPolicy="no-referrer" onError={(e)=>{e.target.style.display='none'; e.target.nextSibling.style.display='flex';}} /><div className="absolute inset-0 bg-slate-800 flex items-center justify-center hidden"><ImageIcon size={24}/></div><div className="absolute bottom-0 left-0 w-full bg-black/60 p-2"><p className="text-[10px] text-white truncate">{style.name}</p></div></div>))}</div></section>
+
+                                    {/* NEW: คลังรูปทรงผมจากแอดมิน */}
+                                    {hairstyleImages.length > 0 && (
+                                        <section className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                                            <h2 className="text-yellow-500 font-bold mb-4 text-sm flex items-center gap-2">
+                                                <ImageIcon size={16}/> แกลเลอรี่ทรงผม ({hairstyleImages.length})
+                                            </h2>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {hairstyleImages.slice(0, 6).map((img) => (
+                                                    <div key={img.id} className="aspect-square rounded-lg overflow-hidden border border-slate-700 bg-black cursor-pointer hover:border-yellow-500 transition-colors group relative" onClick={() => window.open(img.url, '_blank')}>
+                                                        <img src={img.thumbnailUrl} alt={img.name} className="w-full h-full object-cover" loading="lazy"/>
+                                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white"><path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7Z"/></svg>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {hairstyleImages.length > 6 && (
+                                                <p className="text-center text-xs text-slate-500 mt-2">และอีก {hairstyleImages.length - 6} รูป</p>
+                                            )}
+                                        </section>
+                                    )}
+                                    <form onSubmit={handleSubmit} className="space-y-4">
+                                        <div className="space-y-1"><label className="text-xs text-slate-400">ชื่อ-นามสกุล</label><input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-yellow-500 outline-none transition-colors" /></div>
+                                        <div className="space-y-1"><label className="text-xs text-slate-400">เบอร์โทร</label><input required type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-yellow-500 outline-none transition-colors" /></div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="space-y-1"><label className="text-xs text-slate-400">วันที่</label><input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-yellow-500 outline-none [color-scheme:dark] transition-colors" /></div>
+                                            <div className="space-y-1"><label className="text-xs text-slate-400">ช่าง</label><select value={formData.barber} onChange={e => setFormData({...formData, barber: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-yellow-500 outline-none transition-colors">{["ช่างท่านไหนก็ได้", ...ALL_BARBERS].map(b => <option key={b} value={b}>{b}</option>)}</select></div>
+                                        </div>
+                                        <div className="space-y-2"><label className="text-xs text-slate-400">เวลา</label><div className="grid grid-cols-4 gap-2">{TIME_SLOTS.map(t => { const busy = isSlotBusy(t); const selected = formData.time === t; return (<button key={t} type="button" disabled={busy} onClick={() => setFormData({...formData, time: t})} className={`py-2 rounded-lg text-xs font-bold transition-all relative ${busy ? 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-800' : selected ? 'bg-yellow-500 text-slate-900 border border-yellow-500' : 'bg-slate-900 text-slate-300 border border-slate-700 hover:border-yellow-500'}`}>{t}{busy && <div className="absolute inset-0 flex items-center justify-center text-slate-500"><X size={16} className="opacity-50"/></div>}</button>) })}</div></div>
+                                        {status === 'error' && <div className="text-red-400 text-sm bg-red-500/10 p-2 rounded flex gap-2 animate-in"><AlertCircle size={16}/> {message}</div>}
+                                        <button type="submit" disabled={status === 'loading'} className="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-3.5 px-4 rounded-lg shadow-lg shadow-yellow-500/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98] mt-2">{status === 'loading' ? <Loader2 className="animate-spin"/> : 'ยืนยัน'}</button>
+                                    </form>
+                                    
+                                    {/* Live Queue Status */}
+                                    {formData.date && <LiveQueueStatus selectedDate={formData.date} busySlots={busySlots} />}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<BarberBookingApp />);
+    </script>
+</body>
+</html>
