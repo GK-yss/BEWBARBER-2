@@ -68,7 +68,7 @@
         const { Calendar, Clock, Scissors, User, Phone, CheckCircle, AlertCircle, Loader2, Settings, Lock, Edit3, Plus, Trash2, ImageIcon, X, Search, Power, RefreshCw, ChevronDown, ChevronUp, Upload, Save, List, FileText, BarChart, Camera } = Icons;
 
         // --- Config & Helpers ---
-        const FIXED_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxobaDwT_5YTAKySlS5XVEKG48jCjsVEe1JlWUXmFs38_FnfK-nThd_mv52jVfBvUY/exec";
+        const FIXED_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz46GiEj9xY5bs_10xzv5xNVYBvFizYec7daDs2J-b282ijHiO2LNe7VrK7LJoEZk8/exec";
         const ALL_BARBERS = ["ช่างบิว (Master)"];
         const TIME_SLOTS = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
 
@@ -543,13 +543,16 @@
 
             useEffect(() => {
                 const savedStyles = localStorage.getItem('bew_barber_styles');
-                if (savedStyles) { try { setHairstyles(JSON.parse(savedStyles)); } catch (e) {} }
-                fetchData(false);
+                if (savedStyles) { 
+                    try { setHairstyles(JSON.parse(savedStyles)); } catch (e) {} 
+                }
+                // โหลดข้อมูลอื่น แต่ไม่อัพเดท styles (เพื่อไม่ทับ localStorage)
+                fetchData(false, false);
             }, []);
 
-            // Auto-Refresh for Customer
+            // Auto-Refresh for Customer (ไม่อัพเดท styles เพื่อไม่ให้ทับข้อมูลที่แก้ไข)
             useEffect(() => {
-                const interval = setInterval(() => { fetchData(false); }, 15000); 
+                const interval = setInterval(() => { fetchData(false, false); }, 15000); 
                 return () => clearInterval(interval);
             }, [fetchData]);
 
@@ -733,13 +736,20 @@
                 };
             };
 
-            const checkMyBooking = async () => {
+            const checkMyBooking = () => {
                 setCheckStatusState('loading');
-                try {
-                    const res = await fetch(`${FIXED_SCRIPT_URL}?action=checkBooking&phone=${checkPhone}`);
-                    const data = await res.json();
-                    if(data.bookings?.length) { setMyBookings(data.bookings); setCheckStatusState('found'); } else { setCheckStatusState('not-found'); }
-                } catch(e) { setCheckStatusState('error'); }
+                // กรองจาก allBookings ที่มีอยู่แล้ว แสดงเฉพาะคิวที่อนุมัติแล้ว (Approved)
+                const approvedBookings = allBookings.filter(b => 
+                    b.phone === checkPhone && 
+                    (b.status === 'Approved' || b.status === 'Completed')
+                );
+                
+                if(approvedBookings.length > 0) { 
+                    setMyBookings(approvedBookings); 
+                    setCheckStatusState('found'); 
+                } else { 
+                    setCheckStatusState('not-found'); 
+                }
             };
 
             if (view === 'admin-login') return <AdminLogin onLogin={handleAdminLogin} onCancel={() => setView('customer')} />;
@@ -817,7 +827,7 @@
                                         </div>
                                         <div className="space-y-2"><label className="text-xs text-slate-400">เวลา</label><div className="grid grid-cols-4 gap-2">{TIME_SLOTS.map(t => { const busy = isSlotBusy(t); const selected = formData.time === t; return (<button key={t} type="button" disabled={busy} onClick={() => setFormData({...formData, time: t})} className={`py-2 rounded-lg text-xs font-bold transition-all relative ${busy ? 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-800' : selected ? 'bg-yellow-500 text-slate-900 border border-yellow-500' : 'bg-slate-900 text-slate-300 border border-slate-700 hover:border-yellow-500'}`}>{t}{busy && <div className="absolute inset-0 flex items-center justify-center text-slate-500"><X size={16} className="opacity-50"/></div>}</button>) })}</div></div>
                                         {status === 'error' && <div className="text-red-400 text-sm bg-red-500/10 p-2 rounded flex gap-2 animate-in"><AlertCircle size={16}/> {message}</div>}
-                                        <button type="submit" disabled={status === 'loading'} className="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-3.5 px-4 rounded-lg shadow-lg shadow-yellow-500/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98] mt-2">{status === 'loading' ? <Loader2 className="animate-spin"/> : 'ยืนยัน'}</button>
+                                        <button type="submit" disabled={status === 'loading' || shopStatus === 'CLOSED'} className={`w-full font-bold py-3.5 px-4 rounded-lg shadow-lg transition-all flex items-center justify-center gap-2 active:scale-[0.98] mt-2 ${shopStatus === 'CLOSED' ? 'bg-slate-600 text-slate-400 cursor-not-allowed' : 'bg-yellow-500 hover:bg-yellow-400 text-slate-900 shadow-yellow-500/20'}`}>{status === 'loading' ? <Loader2 className="animate-spin"/> : shopStatus === 'CLOSED' ? 'ร้านปิดรับคิว' : 'ยืนยัน'}</button>
                                     </form>
                                     
                                     {/* Live Queue Status */}
