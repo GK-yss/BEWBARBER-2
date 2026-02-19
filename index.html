@@ -68,7 +68,7 @@
         const { Calendar, Clock, Scissors, User, Phone, CheckCircle, AlertCircle, Loader2, Settings, Lock, Edit3, Plus, Trash2, ImageIcon, X, Search, Power, RefreshCw, ChevronDown, ChevronUp, Upload, Save, List, FileText, BarChart, Camera } = Icons;
 
         // --- Config & Helpers ---
-        const FIXED_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz46GiEj9xY5bs_10xzv5xNVYBvFizYec7daDs2J-b282ijHiO2LNe7VrK7LJoEZk8/exec";
+        const FIXED_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzwgk_aB0LWQYMjtGxBYofQGQbR5DpLca9V7iexk2kJAzx8V71hnl0pZM14fK6K3BhW/exec";
         const ALL_BARBERS = ["ช่างบิว (Master)"];
         const TIME_SLOTS = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
 
@@ -201,7 +201,8 @@
             shopStatus, toggleShopStatus, fetchData, loadingData, allBookings,
             setEditingBooking, editingBooking, handleSaveEditBooking, 
             styles, handleAddStyle, handleUpdateStyle, handleDeleteStyle, handleImageUpload, saveStylesToServer, uploadingId, onBack,
-            hairstyleImages, uploadingHairstyle, handleHairstyleImageUpload, deleteHairstyleImage, fetchHairstyleImages
+            hairstyleImages, uploadingHairstyle, handleHairstyleImageUpload, deleteHairstyleImage, fetchHairstyleImages,
+            isAutoSaving
         }) => {
             const [tab, setTab] = useState('dashboard');
             const [filterStatus, setFilterStatus] = useState('All');
@@ -249,8 +250,12 @@
                                     <button onClick={toggleShopStatus} className="bg-slate-700 px-4 py-2 rounded text-xs">สลับสถานะ</button>
                                 </div>
                                 <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                                    <div className="flex justify-between mb-4"><h3 className="font-bold text-white">จัดการทรงผม</h3>
-                                    <div className="flex gap-2"><button onClick={handleAddStyle} className="bg-green-600/20 text-green-500 px-2 py-1 rounded text-xs">+ เพิ่ม</button><button onClick={saveStylesToServer} className="bg-blue-600/20 text-blue-500 px-2 py-1 rounded text-xs">บันทึก</button></div></div>
+                                    <div className="flex justify-between mb-4 items-center"><h3 className="font-bold text-white">จัดการทรงผม</h3>
+                                    <div className="flex gap-2 items-center">
+                                        {isAutoSaving && <span className="text-yellow-500 text-xs flex items-center gap-1"><Loader2 size={12} className="animate-spin"/> กำลังบันทึก...</span>}
+                                        <button onClick={handleAddStyle} className="bg-green-600/20 text-green-500 px-2 py-1 rounded text-xs">+ เพิ่ม</button>
+                                        <button onClick={saveStylesToServer} className="bg-blue-600/20 text-blue-500 px-2 py-1 rounded text-xs">บันทึกเลย</button>
+                                    </div></div>
                                     <div className="grid gap-4">
                                         {styles.map(s => (
                                             <div key={s.id} className="bg-slate-900 p-3 rounded border border-slate-700">
@@ -540,23 +545,48 @@
             // For Hairstyle Images (NEW)
             const [hairstyleImages, setHairstyleImages] = useState([]);
             const [uploadingHairstyle, setUploadingHairstyle] = useState(false);
+            const [isInitialLoad, setIsInitialLoad] = useState(true);
+            const [isAutoSaving, setIsAutoSaving] = useState(false);
 
             useEffect(() => {
-                const savedStyles = localStorage.getItem('bew_barber_styles');
-                if (savedStyles) { 
-                    try { setHairstyles(JSON.parse(savedStyles)); } catch (e) {} 
-                }
-                // โหลดข้อมูลอื่น แต่ไม่อัพเดท styles (เพื่อไม่ทับ localStorage)
-                fetchData(false, false);
+                // โหลดข้อมูลจาก Server ก่อนเสมอ (ไม่ใช่ localStorage) เพื่อให้ข้อมูลตรงกันทุกเครื่อง
+                fetchData(false, true);
+                // Mark initial load complete after a short delay
+                setTimeout(() => setIsInitialLoad(false), 1000);
             }, []);
 
-            // Auto-Refresh for Customer (ไม่อัพเดท styles เพื่อไม่ให้ทับข้อมูลที่แก้ไข)
+            // Auto-Refresh for Customer (อัพเดท styles จาก server เพื่อให้ข้อมูลล่าสุด)
+            // แต่ไม่อัพเดทถ้าอยู่ในหน้า Admin (เพื่อไม่ให้ทับข้อมูลที่กำลังแก้ไข)
             useEffect(() => {
-                const interval = setInterval(() => { fetchData(false, false); }, 15000); 
+                const interval = setInterval(() => { 
+                    // ถ้าไม่ใช่ admin หรือเป็น admin แต่ไม่ได้อยู่ tab menu ให้อัพเดท styles
+                    const shouldUpdateStyles = view !== 'admin';
+                    fetchData(false, shouldUpdateStyles); 
+                }, 15000); 
                 return () => clearInterval(interval);
-            }, [fetchData]);
+            }, [fetchData, view]);
 
-            useEffect(() => { localStorage.setItem('bew_barber_styles', JSON.stringify(hairstyles)); }, [hairstyles]);
+            // AUTO-SAVE: บันทึกทรงผมอัตโนมัติเมื่อมีการแก้ไข (ยกเว้นตอนโหลดครั้งแรก)
+            useEffect(() => {
+                if (isInitialLoad) return;
+                
+                setIsAutoSaving(true);
+                const timeoutId = setTimeout(async () => {
+                    const form = new FormData(); 
+                    form.append('action', 'saveStyles'); 
+                    form.append('styles', JSON.stringify(hairstyles));
+                    try { 
+                        await fetch(FIXED_SCRIPT_URL, {method:'POST', body: form, mode: 'no-cors'}); 
+                        console.log('✅ Auto-saved styles to server');
+                    } catch(e) {
+                        console.error('❌ Auto-save failed:', e);
+                    } finally {
+                        setIsAutoSaving(false);
+                    }
+                }, 1500); // Debounce 1.5 วินาที
+                
+                return () => clearTimeout(timeoutId);
+            }, [hairstyles, isInitialLoad]);
 
             const fetchData = useCallback(async (isManual = false, updateStyles = true) => {
                 setLoadingData(true);
@@ -707,13 +737,20 @@
             const handleSaveEditBooking = async (e) => {
                 e.preventDefault(); if(!editingBooking) return;
                 const form = new FormData();
-                form.append('action', 'updateBooking'); form.append('rowIndex', editingBooking.rowIndex);
+                form.append('action', 'updateBooking'); form.append('rowIndex', editingBooking.id);
                 form.append('name', editingBooking.name); form.append('phone', editingBooking.phone);
                 form.append('date', editingBooking.date); form.append('time', editingBooking.time);
                 form.append('barber', editingBooking.barber);
+                form.append('status', editingBooking.status);
+                form.append('hairCond', editingBooking.hairCond || '');
+                form.append('beforeImg', editingBooking.beforeImg || '');
+                form.append('afterImg', editingBooking.afterImg || '');
                 try {
                     await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form, mode: 'no-cors' });
-                    alert('แก้ไขสำเร็จ'); setEditingBooking(null); fetchData(false);
+                    // อัปเดต state ทันทีโดยไม่ต้องรอ fetch
+                    setAllBookings(prev => prev.map(b => b.id === editingBooking.id ? editingBooking : b));
+                    alert('แก้ไขสำเร็จ'); 
+                    setEditingBooking(null); 
                 } catch(e) { alert('Error'); }
             };
 
@@ -730,7 +767,7 @@
                         const data = await res.json();
                         if(data.result === 'success') {
                             setHairstyles(prev => prev.map(s => s.id === id ? { ...s, image: data.url } : s));
-                            alert('อัปโหลดสำเร็จ! อย่าลืมกด "บันทึก Server"');
+                            // Auto-save จะทำงานอัตโนมัติผ่าน useEffect
                         }
                     } catch(e) { alert('Upload failed'); } finally { setUploadingId(null); }
                 };
@@ -769,13 +806,18 @@
                     const form = new FormData(); form.append('action', 'saveStyles'); form.append('styles', JSON.stringify(hairstyles));
                     try { await fetch(FIXED_SCRIPT_URL, {method:'POST', body: form, mode: 'no-cors'}); alert('บันทึกข้อมูลลง Server เรียบร้อย!'); } catch(e){}
                 }}
-                onBack={() => setView('customer')}
+                onBack={() => {
+                    setView('customer');
+                    // โหลดข้อมูลล่าสุดจาก server เมื่อกลับไปหน้าลูกค้า
+                    fetchData(false, true);
+                }}
                 allBookings={allBookings}
                 hairstyleImages={hairstyleImages}
                 uploadingHairstyle={uploadingHairstyle}
                 handleHairstyleImageUpload={handleHairstyleImageUpload}
                 deleteHairstyleImage={deleteHairstyleImage}
                 fetchHairstyleImages={fetchHairstyleImages}
+                isAutoSaving={isAutoSaving}
             />;
             if (view === 'check-status') return <CheckStatus phone={checkPhone} setPhone={setCheckPhone} onCheck={checkMyBooking} statusState={checkStatusState} myBookings={myBookings} onBack={() => setView('customer')} />;
 
