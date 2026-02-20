@@ -310,7 +310,7 @@
                             if (!onLogin(pass)) setError('รหัสผ่านไม่ถูกต้อง');
                             else setError('');
                         }} className="space-y-4">
-                            <input type="password" placeholder="รหัสผ่าน (1234)" value={pass} onChange={e => {setPass(e.target.value); setError('');}} className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white focus:border-yellow-500 outline-none transition-colors"/>
+                            <input type="password" placeholder="รหัสผ่าน" value={pass} onChange={e => {setPass(e.target.value); setError('');}} className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white focus:border-yellow-500 outline-none transition-colors"/>
                             {error && <p className="text-red-500 text-sm text-center">{error}</p>}
                             <div className="flex gap-2">
                                 <button type="submit" className="flex-1 bg-yellow-500 text-slate-900 py-2 rounded font-bold hover:bg-yellow-400 transition-colors">เข้าสู่ระบบ</button>
@@ -327,7 +327,7 @@
             setEditingBooking, editingBooking, handleSaveEditBooking, 
             styles, handleAddStyle, handleUpdateStyle, handleDeleteStyle, handleImageUpload, saveStylesToServer, uploadingId, onBack,
             hairstyleImages, uploadingHairstyle, handleHairstyleImageUpload, deleteHairstyleImage, fetchHairstyleImages,
-            isAutoSaving, barbers, setBarbers, customers, setCustomers
+            isAutoSaving, barbers, setBarbers, customers, setCustomers, greeting, setGreeting
         }) => {
             const [tab, setTab] = useState('dashboard');
             const [filterStatus, setFilterStatus] = useState('All');
@@ -396,6 +396,25 @@
 
                         {tab === 'menu' && (
                             <div className="space-y-6 animate-in">
+                                {/* Greeting Settings */}
+                                <div className="bg-slate-800 p-4 rounded-xl border border-yellow-500/30">
+                                    <h3 className="font-bold text-white mb-3">💬 ข้อความต้อนรับ</h3>
+                                    <textarea 
+                                        value={greeting || ''} 
+                                        onChange={e => setGreeting(e.target.value)}
+                                        onBlur={() => {
+                                            const form = new FormData();
+                                            form.append('action', 'saveGreeting');
+                                            form.append('greeting', greeting || '');
+                                            fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form });
+                                        }}
+                                        className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white text-sm"
+                                        placeholder="สวัสดีครับ! ยินดีต้อนรับสู่ BEW BARBER"
+                                        rows={2}
+                                    />
+                                    <p className="text-xs text-slate-500 mt-2">💡 ข้อความนี้จะแสดงที่หน้าจองคิว</p>
+                                </div>
+                                
                                 <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
                                     <div><h3 className="font-bold text-white">สถานะร้าน</h3><p className={`text-xs ${shopStatus==='OPEN'?'text-green-500':'text-red-500'}`}>{shopStatus==='OPEN'?'🟢 เปิด':'🔴 ปิด'}</p></div>
                                     <button onClick={toggleShopStatus} className="bg-slate-700 px-4 py-2 rounded text-xs">สลับสถานะ</button>
@@ -840,6 +859,7 @@
             const [customers, setCustomers] = useState([]); // All customers (for admin)
             const [hairstyles, setHairstyles] = useState(defaultStyles);
             const [shopStatus, setShopStatus] = useState('OPEN');
+            const [greeting, setGreeting] = useState('');
             const [barbers, setBarbers] = useState([{ id: 1, name: "ช่างบิว (Master)", active: true }]);
             const ALL_BARBERS = barbers.filter(b => b.active).map(b => b.name);
             const [busySlots, setBusySlots] = useState([]);
@@ -914,6 +934,7 @@
                     const response = await fetch(`${FIXED_SCRIPT_URL}?action=getData`);
                     const data = await response.json();
                     if (data.shopStatus) setShopStatus(data.shopStatus);
+                    if (data.greeting) setGreeting(data.greeting);
                     if (data.busySlots) setBusySlots(data.busySlots);
                     if (data.allBookings) setAllBookings(data.allBookings);
                     if (data.barbers && Array.isArray(data.barbers) && data.barbers.length > 0) {
@@ -1136,6 +1157,8 @@
                     fetchData(false, true);
                 }}
                 allBookings={allBookings}
+                greeting={greeting}
+                setGreeting={setGreeting}
                 hairstyleImages={hairstyleImages}
                 uploadingHairstyle={uploadingHairstyle}
                 handleHairstyleImageUpload={handleHairstyleImageUpload}
@@ -1161,15 +1184,12 @@
                         </div>
                         {shopStatus === 'CLOSED' && <div className="absolute inset-0 z-50 bg-slate-900/90 flex flex-col items-center justify-center p-8 text-center backdrop-blur-sm animate-in"><div className="bg-slate-800 p-8 rounded-2xl border border-red-500/30 shadow-2xl max-w-xs w-full"><Power size={48} className="text-red-500 mx-auto mb-4"/><h2 className="text-2xl font-bold text-white mb-2">ร้านปิดรับคิว</h2><button onClick={() => setView('check-status')} className="w-full bg-slate-700 py-2 rounded-lg text-sm hover:bg-slate-600 transition-colors">เช็คคิว</button></div></div>}
                         
-                        {/* Features Banner */}
-                        <div className="bg-gradient-to-r from-yellow-600/20 to-yellow-500/10 px-4 py-2 border-b border-yellow-500/20">
-                            <div className="flex items-center justify-center gap-3 text-[10px] text-yellow-200 flex-wrap">
-                                <span>✅ จองได้ 24 ชม.</span>
-                                <span>📱 ไม่ต้องโทร</span>
-                                <span>👨‍👦‍👦 หลายช่าง</span>
-                                <span>📊 รายงานครบ</span>
-                            </div>
+                        {/* Greeting Banner */}
+                        {shopStatus !== 'CLOSED' && (
+                        <div className="bg-gradient-to-r from-yellow-600/30 to-yellow-500/20 px-4 py-3 border-b border-yellow-500/30">
+                            <p className="text-center text-white font-medium text-sm">{greeting || "สวัสดีครับ! ยินดีต้อนรับสู่ BEW BARBER 🦈"}</p>
                         </div>
+                        )}
                         <div className="flex-1 overflow-y-auto pb-8 relative">
                             {loadingData && <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500/20 overflow-hidden z-10"><div className="w-full h-full bg-yellow-500 animate-progress origin-left" style={{animation: 'progress 1s infinite linear'}}></div></div>}
                             {status === 'success' ? (

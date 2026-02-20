@@ -40,12 +40,14 @@ function handleRequest(e) {
       var shopStatus = "OPEN";
       var stylesData = [];
       var barbersData = [];
+      var greeting = "สวัสดีครับ! ยินดีต้อนรับสู่ BEW BARBER 🦈";
       
       // อ่าน Settings
       for (var i = 1; i < settingsRaw.length; i++) {
         if (settingsRaw[i][0] === "SHOP_STATUS") shopStatus = settingsRaw[i][1];
         if (settingsRaw[i][0] === "STYLES_DATA") { try { stylesData = JSON.parse(settingsRaw[i][1]); } catch(e) {} }
         if (settingsRaw[i][0] === "BARBERS_DATA") { try { barbersData = JSON.parse(settingsRaw[i][1]); } catch(e) {} }
+        if (settingsRaw[i][0] === "GREETING") greeting = settingsRaw[i][1] || greeting;
       }
       if (barbersData.length === 0) {
         barbersData = [{ id: 1, name: "ช่างบิว (Master)", active: true }];
@@ -77,7 +79,7 @@ function handleRequest(e) {
         });
       }
       
-      return responseJSON({ shopStatus: shopStatus, busySlots: busySlots, styles: stylesData, barbers: barbersData, allBookings: allBookings });
+      return responseJSON({ shopStatus: shopStatus, greeting: greeting, busySlots: busySlots, styles: stylesData, barbers: barbersData, allBookings: allBookings });
     }
 
     // --- 2. จองคิว (Booking) ---
@@ -149,13 +151,17 @@ function handleRequest(e) {
       return responseJSON({ result: "success", url: "https://drive.google.com/uc?export=view&id=" + file.getId() });
     }
 
-    // --- 5. บันทึก Settings (Toggle Status / Save Styles) ---
+    // --- 5. บันทึก Settings (Toggle Status / Save Styles / Greeting) ---
     if (action == "toggleStatus") {
        saveSettingValue(settingSheet, "SHOP_STATUS", e.parameter.status);
        return responseJSON({result:"success"});
     }
     if (action == "saveStyles") {
        saveSettingValue(settingSheet, "STYLES_DATA", e.parameter.styles);
+       return responseJSON({result:"success"});
+    }
+    if (action == "saveGreeting") {
+       saveSettingValue(settingSheet, "GREETING", e.parameter.greeting);
        return responseJSON({result:"success"});
     }
     
