@@ -191,7 +191,7 @@
                             if (!onLogin(pass)) setError('รหัสผ่านไม่ถูกต้อง');
                             else setError('');
                         }} className="space-y-4">
-                            <input type="password" placeholder="รหัสผ่าน (1234)" value={pass} onChange={e => {setPass(e.target.value); setError('');}} className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white focus:border-yellow-500 outline-none transition-colors"/>
+                            <input type="password" placeholder="รหัสผ่าน ()" value={pass} onChange={e => {setPass(e.target.value); setError('');}} className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white focus:border-yellow-500 outline-none transition-colors"/>
                             {error && <p className="text-red-500 text-sm text-center">{error}</p>}
                             <div className="flex gap-2">
                                 <button type="submit" className="flex-1 bg-yellow-500 text-slate-900 py-2 rounded font-bold hover:bg-yellow-400 transition-colors">เข้าสู่ระบบ</button>
