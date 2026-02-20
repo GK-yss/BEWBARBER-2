@@ -139,42 +139,159 @@
 
         const AdminDashboard = ({ allBookings, barbers }) => {
             const stats = useMemo(() => {
-                if (!allBookings) return { income: 0, count: 0, byBarber: {} };
+                if (!allBookings) return { 
+                    income: 0, count: 0, byBarber: {}, byService: {}, 
+                    todayIncome: 0, todayCount: 0, 
+                    monthIncome: 0, monthCount: 0,
+                    dailyStats: [], pendingCount: 0 
+                };
+                
                 const validBookings = allBookings.filter(b => b.status === 'Completed' || b.status === 'Approved');
                 const income = validBookings.reduce((sum, b) => sum + (parseInt(b.price) || 0), 0);
+                
+                // By Barber
                 const byBarber = {};
-                (barbers || []).forEach(b => { if(b.active) byBarber[b.name] = 0; });
-                validBookings.forEach(b => { if(byBarber[b.barber] !== undefined) byBarber[b.barber]++; });
-                return { income, count: validBookings.length, byBarber };
+                (barbers || []).forEach(b => { if(b.active) byBarber[b.name] = { count: 0, income: 0 }; });
+                validBookings.forEach(b => { 
+                    if(byBarber[b.barber] !== undefined) { 
+                        byBarber[b.barber].count++; 
+                        byBarber[b.barber].income += parseInt(b.price) || 0; 
+                    } 
+                });
+                
+                // By Service
+                const byService = {};
+                validBookings.forEach(b => {
+                    const svc = b.service || 'Unknown';
+                    if(!byService[svc]) byService[svc] = { count: 0, income: 0 };
+                    byService[svc].count++;
+                    byService[svc].income += parseInt(b.price) || 0;
+                });
+                
+                // Today's stats
+                const today = new Date().toISOString().split('T')[0];
+                const todayBookings = validBookings.filter(b => b.date === today);
+                const todayIncome = todayBookings.reduce((sum, b) => sum + (parseInt(b.price) || 0), 0);
+                
+                // This month's stats
+                const now = new Date();
+                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                const monthBookings = validBookings.filter(b => b.date >= monthStart);
+                const monthIncome = monthBookings.reduce((sum, b) => sum + (parseInt(b.price) || 0), 0);
+                
+                // Pending count
+                const pendingCount = (allBookings || []).filter(b => b.status === 'Pending').length;
+                
+                // Daily stats for last 7 days
+                const dailyStats = [];
+                for(let i = 6; i >= 0; i--) {
+                    const d = new Date();
+                    d.setDate(d.getDate() - i);
+                    const dateStr = d.toISOString().split('T')[0];
+                    const dayBookings = validBookings.filter(b => b.date === dateStr);
+                    dailyStats.push({
+                        date: dateStr,
+                        label: d.toLocaleDateString('th-TH', { weekday: 'short' }),
+                        count: dayBookings.length,
+                        income: dayBookings.reduce((sum, b) => sum + (parseInt(b.price) || 0), 0)
+                    });
+                }
+                
+                return { 
+                    income, count: validBookings.length, byBarber, byService,
+                    todayIncome, todayCount: todayBookings.length,
+                    monthIncome, monthCount: monthBookings.length,
+                    dailyStats, pendingCount
+                };
             }, [allBookings, barbers]);
 
-            const maxVal = Math.max(...Object.values(stats.byBarber), 1);
+            const maxVal = Math.max(...Object.values(stats.byBarber).map(b => b.count), 1);
+            const maxServiceVal = Math.max(...Object.values(stats.byService).map(s => s.count), 1);
 
             return (
                 <div className="space-y-4 animate-in">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-slate-800 p-4 rounded-xl border border-green-500/30">
-                            <div className="text-slate-400 text-xs">รายได้รวม</div>
-                            <div className="text-2xl font-bold text-green-400">฿{stats.income.toLocaleString()}</div>
+                    {/* Quick Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="bg-gradient-to-br from-green-600/20 to-green-800/20 p-4 rounded-xl border border-green-500/30">
+                            <div className="text-slate-400 text-xs">วันนี้</div>
+                            <div className="text-xl font-bold text-green-400">฿{stats.todayIncome.toLocaleString()}</div>
+                            <div className="text-xs text-slate-500">{stats.todayCount} คิว</div>
                         </div>
-                        <div className="bg-slate-800 p-4 rounded-xl border border-blue-500/30">
-                            <div className="text-slate-400 text-xs">จำนวนคิว</div>
-                            <div className="text-2xl font-bold text-blue-400">{stats.count}</div>
+                        <div className="bg-gradient-to-br from-blue-600/20 to-blue-800/20 p-4 rounded-xl border border-blue-500/30">
+                            <div className="text-slate-400 text-xs">เดือนนี้</div>
+                            <div className="text-xl font-bold text-blue-400">฿{stats.monthIncome.toLocaleString()}</div>
+                            <div className="text-xs text-slate-500">{stats.monthCount} คิว</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-yellow-600/20 to-yellow-800/20 p-4 rounded-xl border border-yellow-500/30">
+                            <div className="text-slate-400 text-xs">รวม</div>
+                            <div className="text-xl font-bold text-yellow-400">฿{stats.income.toLocaleString()}</div>
+                            <div className="text-xs text-slate-500">{stats.count} คิว</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-purple-600/20 to-purple-800/20 p-4 rounded-xl border border-purple-500/30">
+                            <div className="text-slate-400 text-xs">รออนุมัติ</div>
+                            <div className="text-xl font-bold text-purple-400">{stats.pendingCount}</div>
+                            <div className="text-xs text-slate-500">คิว</div>
                         </div>
                     </div>
+
+                    {/* Daily Chart */}
                     <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                        <h4 className="text-white font-bold mb-3 flex items-center gap-2"><BarChart size={16}/> สถิติช่าง</h4>
-                        <div className="space-y-3">
-                            {Object.entries(stats.byBarber).map(([name, count]) => (
-                                <div key={name}>
-                                    <div className="flex justify-between text-xs text-slate-300 mb-1">
-                                        <span>{name}</span><span>{count} คิว</span>
+                        <h4 className="text-white font-bold mb-3 flex items-center gap-2"><BarChart size={16}/> สถิติ 7 วันล่าสุด</h4>
+                        <div className="flex items-end justify-between h-32 gap-2">
+                            {stats.dailyStats.map((day, idx) => {
+                                const maxIncome = Math.max(...stats.dailyStats.map(d => d.income), 1);
+                                const height = (day.income / maxIncome) * 100;
+                                return (
+                                    <div key={idx} className="flex-1 flex flex-col items-center">
+                                        <div className="text-xs text-green-400 font-bold mb-1">฿{day.income}</div>
+                                        <div className="w-full bg-slate-700 rounded-t relative flex-1 min-h-[20px]">
+                                            <div 
+                                                className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-yellow-500 to-yellow-400 rounded-t transition-all duration-500" 
+                                                style={{ height: `${height}%` }}
+                                            ></div>
+                                        </div>
+                                        <div className="text-[10px] text-slate-500 mt-1">{day.label}</div>
                                     </div>
-                                    <div className="w-full bg-slate-700 rounded-full h-2">
-                                        <div className="bg-yellow-500 h-2 rounded-full transition-all duration-500" style={{width: `${(count/maxVal)*100}%`}}></div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* By Barber */}
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <h4 className="text-white font-bold mb-3 flex items-center gap-2"><User size={16}/> สถิติตามช่าง</h4>
+                            <div className="space-y-3">
+                                {Object.entries(stats.byBarber).map(([name, data]) => (
+                                    <div key={name}>
+                                        <div className="flex justify-between text-xs text-slate-300 mb-1">
+                                            <span>{name}</span>
+                                            <span className="text-yellow-500">{data.count} คิว (฿{data.income.toLocaleString()})</span>
+                                        </div>
+                                        <div className="w-full bg-slate-700 rounded-full h-2">
+                                            <div className="bg-yellow-500 h-2 rounded-full transition-all duration-500" style={{width: `${(data.count/maxVal)*100}%`}}></div>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* By Service */}
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <h4 className="text-white font-bold mb-3 flex items-center gap-2"><Scissors size={16}/> สถิติตามบริการ</h4>
+                            <div className="space-y-3">
+                                {Object.entries(stats.byService).slice(0, 5).map(([service, data]) => (
+                                    <div key={service}>
+                                        <div className="flex justify-between text-xs text-slate-300 mb-1">
+                                            <span className="truncate max-w-[120px]">{service}</span>
+                                            <span className="text-green-400">{data.count} คิว (฿{data.income.toLocaleString()})</span>
+                                        </div>
+                                        <div className="w-full bg-slate-700 rounded-full h-2">
+                                            <div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{width: `${(data.count/maxServiceVal)*100}%`}}></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -193,7 +310,7 @@
                             if (!onLogin(pass)) setError('รหัสผ่านไม่ถูกต้อง');
                             else setError('');
                         }} className="space-y-4">
-                            <input type="password" placeholder="รหัสผ่าน ()" value={pass} onChange={e => {setPass(e.target.value); setError('');}} className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white focus:border-yellow-500 outline-none transition-colors"/>
+                            <input type="password" placeholder="รหัสผ่าน (1234)" value={pass} onChange={e => {setPass(e.target.value); setError('');}} className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white focus:border-yellow-500 outline-none transition-colors"/>
                             {error && <p className="text-red-500 text-sm text-center">{error}</p>}
                             <div className="flex gap-2">
                                 <button type="submit" className="flex-1 bg-yellow-500 text-slate-900 py-2 rounded font-bold hover:bg-yellow-400 transition-colors">เข้าสู่ระบบ</button>
@@ -205,18 +322,299 @@
             );
         };
 
+        // --- Customer Login / Register Component ---
+        const CustomerAuth = ({ onLogin, onCancel, onRegisterSuccess }) => {
+            const [mode, setMode] = useState('login'); // 'login' or 'register'
+            const [phone, setPhone] = useState('');
+            const [password, setPassword] = useState('');
+            const [name, setName] = useState('');
+            const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setError('');
+                setLoading(true);
+                
+                try {
+                    if (mode === 'login') {
+                        const form = new FormData();
+                        form.append('action', 'customerLogin');
+                        form.append('phone', phone);
+                        form.append('password', password);
+                        
+                        const res = await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form });
+                        const data = await res.json();
+                        
+                        if (data.result === 'success') {
+                            onLogin(data.customer);
+                        } else {
+                            setError(data.message || 'เข้าสมัครสมาชิกสำเร็จ!');
+                        }
+                    } else {
+                        const form = new FormData();
+                        form.append('action', 'customerRegister');
+                        form.append('phone', phone);
+                        form.append('name', name);
+                        form.append('password', password || '1234');
+                        
+                        const res = await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form });
+                        const data = await res.json();
+                        
+                        if (data.result === 'success') {
+                            alert('สมัครสมาชิกสำเร็จ! กรุณาเข้าสู่ระบบ');
+                            setMode('login');
+                            setPassword('');
+                        } else {
+                            setError(data.message || 'เกิดข้อผิดพลาด');
+                        }
+                    }
+                } catch (err) {
+                    setError('เกิดข้อผิดพลาด กรุณาลองใหม่');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+                    <div className="bg-slate-800 p-6 rounded-xl shadow-2xl w-full max-w-sm border border-slate-700 animate-in">
+                        <div className="flex justify-center mb-4">
+                            <div className="bg-yellow-500 p-3 rounded-full">
+                                <User size={32} className="text-slate-900"/>
+                            </div>
+                        </div>
+                        <h2 className="text-xl font-bold text-white text-center mb-4">
+                            {mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
+                        </h2>
+                        
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            {mode === 'register' && (
+                                <input 
+                                    type="text" 
+                                    placeholder="ชื่อ-นามสกุล"
+                                    value={name}
+                                    onChange={e => setName(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white focus:border-yellow-500 outline-none transition-colors"
+                                />
+                            )}
+                            <input 
+                                type="tel" 
+                                placeholder="เบอร์โทรศัพท์"
+                                value={phone}
+                                onChange={e => setPhone(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white focus:border-yellow-500 outline-none transition-colors"
+                                required
+                            />
+                            <input 
+                                type="password" 
+                                placeholder={mode === 'register' ? 'รหัสผ่าน (ไม่กรอก = 1234)' : 'รหัสผ่าน'}
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white focus:border-yellow-500 outline-none transition-colors"
+                            />
+                            {error && <p className="text-red-400 text-sm text-center bg-red-500/10 p-2 rounded">{error}</p>}
+                            
+                            <button 
+                                type="submit" 
+                                disabled={loading}
+                                className="w-full bg-yellow-500 text-slate-900 py-3 rounded font-bold hover:bg-yellow-400 transition-colors flex items-center justify-center gap-2"
+                            >
+                                {loading ? <Loader2 className="animate-spin"/> : null}
+                                {mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
+                            </button>
+                        </form>
+                        
+                        <div className="mt-4 text-center space-y-2">
+                            <button 
+                                onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
+                                className="text-yellow-500 text-sm hover:underline"
+                            >
+                                {mode === 'login' ? 'ยังไม่มีบัญชี? สมัครสมาชิก' : 'มีบัญชีแล้ว? เข้าสู่ระบบ'}
+                            </button>
+                            <div>
+                                <button onClick={onCancel} className="text-slate-400 text-sm hover:text-white">กลับหน้าหลัก</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Customer Profile Component ---
+        const CustomerProfile = ({ customer, onUpdate, onBack }) => {
+            const [formData, setFormData] = useState({
+                name: customer.name || '',
+                phone: customer.phone || '',
+                password: customer.password || '',
+                hairCondition: customer.hairCondition || '',
+                habits: customer.habits || '',
+                notes: customer.notes || ''
+            });
+            const [saving, setSaving] = useState(false);
+
+            const handleSave = async () => {
+                setSaving(true);
+                try {
+                    const form = new FormData();
+                    form.append('action', 'updateCustomer');
+                    form.append('rowIndex', customer.id);
+                    form.append('name', formData.name);
+                    form.append('phone', formData.phone);
+                    form.append('password', formData.password);
+                    form.append('hairCondition', formData.hairCondition);
+                    form.append('habits', formData.habits);
+                    form.append('notes', formData.notes);
+                    
+                    const res = await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form });
+                    const data = await res.json();
+                    
+                    if (data.result === 'success') {
+                        alert('บันทึกข้อมูลสำเร็จ!');
+                        onUpdate({ ...customer, ...formData });
+                    } else {
+                        alert('เกิดข้อผิดพลาด');
+                    }
+                } catch (err) {
+                    alert('เกิดข้อผิดพลาด');
+                } finally {
+                    setSaving(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-900 text-slate-200 font-sans">
+                    <div className="bg-slate-800 p-4 border-b border-slate-700 flex items-center justify-between sticky top-0 z-20">
+                        <div className="flex items-center gap-3">
+                            <button onClick={onBack} className="bg-slate-700 p-2 rounded-full hover:bg-slate-600"><X size={18}/></button>
+                            <h1 className="font-bold text-lg">โปรไฟล์ของฉัน</h1>
+                        </div>
+                    </div>
+                    
+                    <div className="p-4 space-y-4 max-w-md mx-auto">
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <h3 className="font-bold text-yellow-500 mb-3 flex items-center gap-2"><User size={18}/> ข้อมูลส่วนตัว</h3>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-xs text-slate-400">ชื่อ-นามสกุล</label>
+                                    <input 
+                                        type="text" 
+                                        value={formData.name}
+                                        onChange={e => setFormData({...formData, name: e.target.value})}
+                                        className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-400">เบอร์โทร</label>
+                                    <input 
+                                        type="tel" 
+                                        value={formData.phone}
+                                        onChange={e => setFormData({...formData, phone: e.target.value})}
+                                        className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-400">รหัสผ่าน</label>
+                                    <input 
+                                        type="password" 
+                                        value={formData.password}
+                                        onChange={e => setFormData({...formData, password: e.target.value})}
+                                        className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white"
+                                        placeholder="1234"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <h3 className="font-bold text-yellow-500 mb-3 flex items-center gap-2"><Scissors size={18}/> ข้อมูลสภาพผม</h3>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-xs text-slate-400">สภาพเส้นผม</label>
+                                    <select 
+                                        value={formData.hairCondition}
+                                        onChange={e => setFormData({...formData, hairCondition: e.target.value})}
+                                        className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white"
+                                    >
+                                        <option value="">- เลือกสภาพผม -</option>
+                                        <option value="ปกติ">ปกติ</option>
+                                        <option value="แห้งเสีย">แห้งเสีย</option>
+                                        <option value="มัน">มัน</option>
+                                        <option value="บาง">ผมบาง</option>
+                                        <option value="เส้นใหญ่">เส้นใหญ่</option>
+                                        <option value="เส้นเล็ก">เส้นเล็ก</option>
+                                        <option value="หลากหลาย">หลากหลาย</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-400">นิสัยการดูแลผม</label>
+                                    <select 
+                                        value={formData.habits}
+                                        onChange={e => setFormData({...formData, habits: e.target.value})}
+                                        className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white"
+                                    >
+                                        <option value="">- เลือกนิสัย -</option>
+                                        <option value="ไม่ได้ทำอะไร">ไม่ได้ทำอะไร</option>
+                                        <option value="แว็กผม">แว็กผม</option>
+                                        <option value="น้ำมน้ำมัน">น้ำมน้ำมัน</option>
+                                        <option value="ซอสผม">ซอสผม</option>
+                                        <option value="บำรุงเป็นประจำ">บำรุงเป็นประจำ</option>
+                                        <option value="อื่นๆ">อื่นๆ</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-400">หมายเหตุเพิ่มเติม</label>
+                                    <textarea 
+                                        value={formData.notes}
+                                        onChange={e => setFormData({...formData, notes: e.target.value})}
+                                        className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white h-20"
+                                        placeholder="ระบุสิ่งที่ต้องการให้ช่างรู้..."
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <button 
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="w-full bg-yellow-500 text-slate-900 py-3 rounded-lg font-bold flex items-center justify-center gap-2"
+                        >
+                            {saving ? <Loader2 className="animate-spin"/> : <Save size={18}/>}
+                            บันทึกข้อมูล
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
         const AdminPanel = ({ 
             shopStatus, toggleShopStatus, fetchData, loadingData, allBookings,
             setEditingBooking, editingBooking, handleSaveEditBooking, 
             styles, handleAddStyle, handleUpdateStyle, handleDeleteStyle, handleImageUpload, saveStylesToServer, uploadingId, onBack,
             hairstyleImages, uploadingHairstyle, handleHairstyleImageUpload, deleteHairstyleImage, fetchHairstyleImages,
-            isAutoSaving, barbers, setBarbers
+            isAutoSaving, barbers, setBarbers, customers, setCustomers
         }) => {
             const [tab, setTab] = useState('dashboard');
             const [filterStatus, setFilterStatus] = useState('All');
             const [confirmDeleteId, setConfirmDeleteId] = useState(null);
             const [selectingImageFor, setSelectingImageFor] = useState(null);
             const [newBarberName, setNewBarberName] = useState('');
+            const [loadingCustomers, setLoadingCustomers] = useState(false);
+
+            // Fetch customers when tab is selected
+            useEffect(() => {
+                if (tab === 'customers' && (!customers || customers.length === 0)) {
+                    setLoadingCustomers(true);
+                    fetch(`${FIXED_SCRIPT_URL}?action=getCustomers`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.result === 'success' && data.customers) {
+                                setCustomers(data.customers);
+                            }
+                        })
+                        .finally(() => setLoadingCustomers(false));
+                }
+            }, [tab]);
 
             // Filter logic
             const filteredBookings = useMemo(() => {
@@ -241,9 +639,9 @@
                     </div>
                     
                     <div className="flex p-2 bg-slate-800 gap-1 overflow-x-auto">
-                        {['dashboard', 'queue', 'menu', 'barbers', 'images'].map(t => (
+                        {['dashboard', 'queue', 'menu', 'barbers', 'customers', 'images'].map(t => (
                             <button key={t} onClick={() => setTab(t)} className={`flex-1 py-2 text-xs font-bold uppercase rounded ${tab === t ? 'bg-yellow-500 text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
-                                {t === 'dashboard' ? 'แดชบอร์ด' : t === 'queue' ? 'รายการจอง' : t === 'menu' ? 'เมนู/ร้าน' : t === 'barbers' ? 'ช่าง' : 'รูปทรงผม'}
+                                {t === 'dashboard' ? 'แดชบอร์ด' : t === 'queue' ? 'รายการจอง' : t === 'menu' ? 'เมนู/ร้าน' : t === 'barbers' ? 'ช่าง' : t === 'customers' ? 'ลูกค้า' : 'รูปทรงผม'}
                             </button>
                         ))}
                     </div>
@@ -450,6 +848,49 @@
                             </div>
                         )}
 
+                        {tab === 'customers' && (
+                            <div className="space-y-4 animate-in">
+                                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                                    <h3 className="font-bold text-white mb-4 flex items-center gap-2">
+                                        <User size={18}/> ฐานข้อมูลลูกค้า
+                                        <span className="text-xs text-slate-400">({customers?.length || 0} คน)</span>
+                                    </h3>
+                                    
+                                    {loadingCustomers ? (
+                                        <div className="text-center py-8"><Loader2 className="animate-spin mx-auto text-yellow-500"/></div>
+                                    ) : customers && customers.length > 0 ? (
+                                        <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                                            {customers.map(c => (
+                                                <div key={c.id} className="bg-slate-900 p-3 rounded-lg border border-slate-700">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <div className="font-bold text-white">{c.name || '-'}</div>
+                                                            <div className="text-xs text-slate-400">{c.phone}</div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="text-xs text-slate-500">สภาพผม: <span className="text-yellow-500">{c.hairCondition || '-'}</span></div>
+                                                            <div className="text-xs text-slate-500">นิสัย: <span className="text-blue-400">{c.habits || '-'}</span></div>
+                                                        </div>
+                                                    </div>
+                                                    {c.notes && (
+                                                        <div className="mt-2 text-xs text-slate-500 bg-slate-800 p-2 rounded">
+                                                            📝 {c.notes}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8 text-slate-500">
+                                            <User size={48} className="mx-auto mb-2 opacity-30"/>
+                                            <p>ยังไม่มีข้อมูลลูกค้า</p>
+                                            <p className="text-xs mt-1">ลูกค้าจะเพิ่มเมื่อลงทะเบียนผ่านแอป</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {tab === 'images' && (
                             <div className="space-y-6 animate-in">
                                 <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
@@ -652,6 +1093,8 @@
             ];
 
             const [view, setView] = useState('customer');
+            const [customer, setCustomer] = useState(null); // Logged in customer
+            const [customers, setCustomers] = useState([]); // All customers (for admin)
             const [hairstyles, setHairstyles] = useState(defaultStyles);
             const [shopStatus, setShopStatus] = useState('OPEN');
             const [barbers, setBarbers] = useState([{ id: 1, name: "ช่างบิว (Master)", active: true }]);
@@ -928,6 +1371,15 @@
             };
 
             if (view === 'admin-login') return <AdminLogin onLogin={handleAdminLogin} onCancel={() => setView('customer')} />;
+            if (view === 'customer-auth') return <CustomerAuth 
+                onLogin={(c) => { setCustomer(c); setView('customer'); }} 
+                onCancel={() => setView('customer')} 
+            />;
+            if (view === 'customer-profile') return <CustomerProfile 
+                customer={customer} 
+                onUpdate={(c) => setCustomer(c)} 
+                onBack={() => setView('customer')} 
+            />;
             if (view === 'admin') return <AdminPanel 
                 shopStatus={shopStatus} toggleShopStatus={toggleShopStatus} fetchData={fetchData} loadingData={loadingData}
                 adminSearchQuery={adminSearchQuery} setAdminSearchQuery={setAdminSearchQuery} handleAdminSearch={handleAdminSearch}
@@ -958,6 +1410,8 @@
                 isAutoSaving={isAutoSaving}
                 barbers={barbers}
                 setBarbers={setBarbers}
+                customers={customers}
+                setCustomers={setCustomers}
             />;
             if (view === 'check-status') return <CheckStatus phone={checkPhone} setPhone={setCheckPhone} onCheck={checkMyBooking} statusState={checkStatusState} myBookings={myBookings} onBack={() => setView('customer')} />;
 
@@ -967,7 +1421,22 @@
                         <div className="bg-gradient-to-r from-yellow-600 to-yellow-500 p-6 text-slate-900 relative">
                             <div className="flex justify-between items-start">
                                 <div><h1 className="text-3xl font-bold tracking-tighter">BEW BARBER</h1><div className="flex items-center gap-2 mt-1">{shopStatus === 'OPEN' ? <span className="bg-green-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 animate-pulse"><span className="w-2 h-2 bg-white rounded-full"></span> OPEN</span> : <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1"><Power size={8}/> CLOSED</span>}<p className="font-medium opacity-90 text-sm">จองคิวตัดผมออนไลน์</p></div></div>
-                                <div className="flex gap-2"><button onClick={() => setView('check-status')} className="bg-slate-900/10 hover:bg-slate-900/20 p-2 rounded-full transition-colors" title="เช็คคิว"><Search size={18} /></button><button onClick={() => setView('admin-login')} className="bg-slate-900/10 hover:bg-slate-900/20 p-2 rounded-full transition-colors"><Lock size={18} /></button></div>
+                                <div className="flex gap-2">
+                                    {customer ? (
+                                        <>
+                                            <button onClick={() => setView('customer-profile')} className="bg-slate-900/10 hover:bg-slate-900/20 p-2 rounded-full transition-colors" title="โปรไฟล์">
+                                                <User size={18} />
+                                            </button>
+                                            <button onClick={() => { setCustomer(null); setView('customer'); }} className="bg-slate-900/10 hover:bg-slate-900/20 p-2 rounded-full transition-colors" title="ออกจากระบบ">
+                                                <Power size={18} />
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button onClick={() => setView('customer-auth')} className="bg-slate-900/10 hover:bg-slate-900/20 p-2 rounded-full transition-colors" title="เข้าสู่ระบบ">
+                                            <User size={18} />
+                                        </button>
+                                    )}
+                                    <button onClick={() => setView('check-status')} className="bg-slate-900/10 hover:bg-slate-900/20 p-2 rounded-full transition-colors" title="เช็คคิว"><Search size={18} /></button><button onClick={() => setView('admin-login')} className="bg-slate-900/10 hover:bg-slate-900/20 p-2 rounded-full transition-colors"><Lock size={18} /></button></div>
                             </div>
                         </div>
                         {shopStatus === 'CLOSED' && <div className="absolute inset-0 z-50 bg-slate-900/90 flex flex-col items-center justify-center p-8 text-center backdrop-blur-sm animate-in"><div className="bg-slate-800 p-8 rounded-2xl border border-red-500/30 shadow-2xl max-w-xs w-full"><Power size={48} className="text-red-500 mx-auto mb-4"/><h2 className="text-2xl font-bold text-white mb-2">ร้านปิดรับคิว</h2><button onClick={() => setView('check-status')} className="w-full bg-slate-700 py-2 rounded-lg text-sm hover:bg-slate-600 transition-colors">เช็คคิว</button></div></div>}

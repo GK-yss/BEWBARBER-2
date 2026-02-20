@@ -3,6 +3,7 @@ var SHEET_ID = "1VfDsy0BS7M3ztWuzPDHtfG8rxF6UNmzASKA3dngFMog";
 var FOLDER_ID = "1J0IekxUXuKU7xbTLuX65fTlaxtPysFaH";
 var SHEET_NAME_BOOKINGS = "BEWBARBER 2"; 
 var SHEET_NAME_SETTINGS = "Settings"; 
+var SHEET_NAME_CUSTOMERS = "Customers"; 
 
 function doGet(e) {
   // ถ้าไม่มี action หรือเป็นการเข้าเว็บโดยตรง ให้แสดง HTML
@@ -29,6 +30,7 @@ function handleRequest(e) {
     var ss = SpreadsheetApp.openById(SHEET_ID);
     var bookingSheet = ss.getSheetByName(SHEET_NAME_BOOKINGS);
     var settingSheet = ss.getSheetByName(SHEET_NAME_SETTINGS);
+    var customerSheet = ss.getSheetByName(SHEET_NAME_CUSTOMERS);
 
     // --- 1. ดึงข้อมูล (getData) ---
     if (action == "getData") {
@@ -291,6 +293,88 @@ function handleRequest(e) {
       return responseJSON({ result: "success", barbers: barbersData });
     }
 
+    // --- 15. ล็อกอินลูกค้า (Customer Login) ---
+    if (action == "customerLogin") {
+      var customerSheet = ss.getSheetByName(SHEET_NAME_CUSTOMERS);
+      var customersRaw = customerSheet.getDataRange().getValues();
+      var phone = e.parameter.phone;
+      var password = e.parameter.password || "";
+      
+      for (var i = 1; i < customersRaw.length; i++) {
+        if (String(customersRaw[i][1]) === phone) {
+          if (password === "" || String(customersRaw[i][2]) === password) {
+            return responseJSON({ 
+              result: "success", 
+              customer: {
+                id: i + 1,
+                name: customersRaw[i][0],
+                phone: customersRaw[i][1],
+                password: customersRaw[i][2],
+                hairCondition: customersRaw[i][3] || "",
+                habits: customersRaw[i][4] || "",
+                notes: customersRaw[i][5] || "",
+                createdAt: customersRaw[i][6]
+              }
+            });
+          }
+        }
+      }
+      return responseJSON({ result: "error", message: "เบอร์โทรหรือรหัสผ่านไม่ถูกต้อง" });
+    }
+
+    // --- 16. สมัครสมาชิก (Customer Register) ---
+    if (action == "customerRegister") {
+      var customerSheet = ss.getSheetByName(SHEET_NAME_CUSTOMERS);
+      var customersRaw = customerSheet.getDataRange().getValues();
+      var phone = e.parameter.phone;
+      var name = e.parameter.name || "";
+      var password = e.parameter.password || "1234";
+      
+      for (var i = 1; i < customersRaw.length; i++) {
+        if (String(customersRaw[i][1]) === phone) {
+          return responseJSON({ result: "error", message: "เบอร์โทรนี้ลงทะเบียนแล้ว" });
+        }
+      }
+      
+      customerSheet.appendRow([name, phone, password, "", "", "", new Date()]);
+      return responseJSON({ result: "success", message: "ลงทะเบียนสำเร็จ" });
+    }
+
+    // --- 17. อัพเดทข้อมูลลูกค้า (Update Customer Profile) ---
+    if (action == "updateCustomer") {
+      var rowIndex = parseInt(e.parameter.rowIndex);
+      if (rowIndex > 1) {
+        if (e.parameter.name) customerSheet.getRange(rowIndex, 1).setValue(e.parameter.name);
+        if (e.parameter.password) customerSheet.getRange(rowIndex, 2).setValue(e.parameter.password);
+        if (e.parameter.phone) customerSheet.getRange(rowIndex, 2).setValue(e.parameter.phone);
+        if (e.parameter.hairCondition) customerSheet.getRange(rowIndex, 4).setValue(e.parameter.hairCondition);
+        if (e.parameter.habits) customerSheet.getRange(rowIndex, 5).setValue(e.parameter.habits);
+        if (e.parameter.notes) customerSheet.getRange(rowIndex, 6).setValue(e.parameter.notes);
+        return responseJSON({ result: "success" });
+      }
+      return responseJSON({ result: "error", message: "Invalid Row" });
+    }
+
+    // --- 18. ดึงข้อมูลลูกค้าทั้งหมด (Get All Customers - Admin) ---
+    if (action == "getCustomers") {
+      var customerSheet = ss.getSheetByName(SHEET_NAME_CUSTOMERS);
+      var customersRaw = customerSheet.getDataRange().getValues();
+      var customers = [];
+      for (var i = 1; i < customersRaw.length; i++) {
+        customers.push({
+          id: i + 1,
+          name: customersRaw[i][0],
+          phone: customersRaw[i][1],
+          password: customersRaw[i][2],
+          hairCondition: customersRaw[i][3] || "",
+          habits: customersRaw[i][4] || "",
+          notes: customersRaw[i][5] || "",
+          createdAt: customersRaw[i][6]
+        });
+      }
+      return responseJSON({ result: "success", customers: customers });
+    }
+
     return responseJSON({ result: "error", message: "Invalid Action" });
 
   } catch (err) {
@@ -317,11 +401,15 @@ function initSheets() {
   var ss = SpreadsheetApp.openById(SHEET_ID);
   if (!ss.getSheetByName(SHEET_NAME_SETTINGS)) {
     var s = ss.insertSheet(SHEET_NAME_SETTINGS);
-    s.appendRow(["Key", "Value"]); s.appendRow(["SHOP_STATUS", "OPEN"]); s.appendRow(["STYLES_DATA", "[]"]);
+    s.appendRow(["Key", "Value"]); s.appendRow(["SHOP_STATUS", "OPEN"]); s.appendRow(["STYLES_DATA", "[]"]); s.appendRow(["BARBERS_DATA", '[{"id":1,"name":"ช่างบิว (Master)","active":true}]']);
   }
   if (!ss.getSheetByName(SHEET_NAME_BOOKINGS)) {
     var s = ss.insertSheet(SHEET_NAME_BOOKINGS);
     s.appendRow(["Timestamp", "Name", "Phone", "Date", "Time", "Service", "Price", "Barber", "ImageURL", "Status", "SlipURL", "HairCondition", "BeforeImg", "AfterImg"]);
+  }
+  if (!ss.getSheetByName(SHEET_NAME_CUSTOMERS)) {
+    var s = ss.insertSheet(SHEET_NAME_CUSTOMERS);
+    s.appendRow(["Name", "Phone", "Password", "HairCondition", "Habits", "Notes", "CreatedAt"]);
   }
 }
 
