@@ -293,69 +293,7 @@ function handleRequest(e) {
       return responseJSON({ result: "success", barbers: barbersData });
     }
 
-    // --- 15. ล็อกอินลูกค้า (Customer Login) ---
-    if (action == "customerLogin") {
-      var customerSheet = ss.getSheetByName(SHEET_NAME_CUSTOMERS);
-      var customersRaw = customerSheet.getDataRange().getValues();
-      var phone = e.parameter.phone;
-      var password = e.parameter.password || "";
-      
-      for (var i = 1; i < customersRaw.length; i++) {
-        if (String(customersRaw[i][1]) === phone) {
-          if (password === "" || String(customersRaw[i][2]) === password) {
-            return responseJSON({ 
-              result: "success", 
-              customer: {
-                id: i + 1,
-                name: customersRaw[i][0],
-                phone: customersRaw[i][1],
-                password: customersRaw[i][2],
-                hairCondition: customersRaw[i][3] || "",
-                habits: customersRaw[i][4] || "",
-                notes: customersRaw[i][5] || "",
-                createdAt: customersRaw[i][6]
-              }
-            });
-          }
-        }
-      }
-      return responseJSON({ result: "error", message: "เบอร์โทรหรือรหัสผ่านไม่ถูกต้อง" });
-    }
-
-    // --- 16. สมัครสมาชิก (Customer Register) ---
-    if (action == "customerRegister") {
-      var customerSheet = ss.getSheetByName(SHEET_NAME_CUSTOMERS);
-      var customersRaw = customerSheet.getDataRange().getValues();
-      var phone = e.parameter.phone;
-      var name = e.parameter.name || "";
-      var password = e.parameter.password || "1234";
-      
-      for (var i = 1; i < customersRaw.length; i++) {
-        if (String(customersRaw[i][1]) === phone) {
-          return responseJSON({ result: "error", message: "เบอร์โทรนี้ลงทะเบียนแล้ว" });
-        }
-      }
-      
-      customerSheet.appendRow([name, phone, password, "", "", "", new Date()]);
-      return responseJSON({ result: "success", message: "ลงทะเบียนสำเร็จ" });
-    }
-
-    // --- 17. อัพเดทข้อมูลลูกค้า (Update Customer Profile) ---
-    if (action == "updateCustomer") {
-      var rowIndex = parseInt(e.parameter.rowIndex);
-      if (rowIndex > 1) {
-        if (e.parameter.name) customerSheet.getRange(rowIndex, 1).setValue(e.parameter.name);
-        if (e.parameter.password) customerSheet.getRange(rowIndex, 2).setValue(e.parameter.password);
-        if (e.parameter.phone) customerSheet.getRange(rowIndex, 2).setValue(e.parameter.phone);
-        if (e.parameter.hairCondition) customerSheet.getRange(rowIndex, 4).setValue(e.parameter.hairCondition);
-        if (e.parameter.habits) customerSheet.getRange(rowIndex, 5).setValue(e.parameter.habits);
-        if (e.parameter.notes) customerSheet.getRange(rowIndex, 6).setValue(e.parameter.notes);
-        return responseJSON({ result: "success" });
-      }
-      return responseJSON({ result: "error", message: "Invalid Row" });
-    }
-
-    // --- 18. ดึงข้อมูลลูกค้าทั้งหมด (Get All Customers - Admin) ---
+    // --- 15. ดึงข้อมูลลูกค้าทั้งหมด (Get All Customers - Admin) ---
     if (action == "getCustomers") {
       var customerSheet = ss.getSheetByName(SHEET_NAME_CUSTOMERS);
       var customersRaw = customerSheet.getDataRange().getValues();
