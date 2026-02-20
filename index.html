@@ -370,7 +370,16 @@
                 <div className="min-h-screen bg-slate-900 text-slate-200 font-sans pb-20 animate-in">
                     <div className="bg-slate-800 p-4 border-b border-slate-700 sticky top-0 z-20 flex justify-between items-center shadow-lg">
                         <h1 className="font-bold text-yellow-500 flex items-center gap-2"><Settings size={20}/> จัดการร้าน</h1>
-                        <button onClick={onBack} className="text-sm bg-slate-700 px-3 py-1 rounded hover:bg-slate-600 text-white">กลับหน้าร้าน</button>
+                        <div className="flex gap-2">
+                            <a 
+                                href="https://docs.google.com/spreadsheets/d/1VfDsy0BS7M3ztWuzPDHtfG8rxF6UNmzASKA3dngFMog" 
+                                target="_blank"
+                                className="text-sm bg-green-600 px-3 py-1 rounded hover:bg-green-500 text-white flex items-center gap-1"
+                            >
+                                📊 Google Sheet
+                            </a>
+                            <button onClick={onBack} className="text-sm bg-slate-700 px-3 py-1 rounded hover:bg-slate-600 text-white">กลับหน้าร้าน</button>
+                        </div>
                     </div>
                     
                     <div className="flex p-2 bg-slate-800 gap-1 overflow-x-auto">
