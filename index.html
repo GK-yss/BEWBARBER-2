@@ -5,14 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bew Barber Booking System</title>
     
-    <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
-    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
@@ -68,9 +65,18 @@
         const { Calendar, Clock, Scissors, User, Phone, CheckCircle, AlertCircle, Loader2, Settings, Lock, Edit3, Plus, Trash2, ImageIcon, X, Search, Power, RefreshCw, ChevronDown, ChevronUp, Upload, Save, List, FileText, BarChart, Camera } = Icons;
 
         // --- Config & Helpers ---
-        const FIXED_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzwgk_aB0LWQYMjtGxBYofQGQbR5DpLca9V7iexk2kJAzx8V71hnl0pZM14fK6K3BhW/exec";
+        const FIXED_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxeMXvseSuyAoWNUNzMuf89fz2lmYr8Cb-heiiUDCGBiT9Akwwu1-_2iim6BbQJotPf/exec";
         const ALL_BARBERS = ["ช่างบิว (Master)"];
         const TIME_SLOTS = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
+
+        // --- เพิ่ม Status Mapping สำหรับแปลภาษา ---
+        const statusMap = {
+            'All': 'ทั้งหมด',
+            'Pending': 'รอดำเนินการ',
+            'Approved': 'ยืนยันแล้ว',
+            'Completed': 'เสร็จสิ้น',
+            'Rejected': 'ยกเลิก'
+        };
 
         const getDisplayImageUrl = (url) => {
             if (!url) return '';
@@ -207,7 +213,7 @@
             const [tab, setTab] = useState('dashboard');
             const [filterStatus, setFilterStatus] = useState('All');
             const [confirmDeleteId, setConfirmDeleteId] = useState(null);
-            const [selectingImageFor, setSelectingImageFor] = useState(null); // เก็บ style ID ที่กำลังเลือกรูป
+            const [selectingImageFor, setSelectingImageFor] = useState(null);
 
             // Filter logic
             const filteredBookings = useMemo(() => {
@@ -284,7 +290,7 @@
                                                     </div>
                                                 </div>
                                                 
-                                                {/* NEW: ปุ่มเลือกจากคลัง */}
+                                                {/* ปุ่มเลือกจากคลัง */}
                                                 {hairstyleImages.length > 0 && (
                                                     <div className="mt-3 pt-3 border-t border-slate-800">
                                                         {selectingImageFor === s.id ? (
@@ -380,8 +386,9 @@
                         {tab === 'queue' && (
                             <div className="space-y-4 animate-in">
                                 <div className="flex gap-2 overflow-x-auto pb-2">
+                                    {/* นำ statusMap มาใช้เปลี่ยนปุ่ม Filter ให้เป็นภาษาไทย */}
                                     {['All', 'Pending', 'Approved', 'Completed', 'Rejected'].map(s => (
-                                        <button key={s} onClick={() => setFilterStatus(s)} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${filterStatus === s ? 'bg-yellow-500 text-slate-900 font-bold' : 'bg-slate-800 text-slate-400'}`}>{s}</button>
+                                        <button key={s} onClick={() => setFilterStatus(s)} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${filterStatus === s ? 'bg-yellow-500 text-slate-900 font-bold' : 'bg-slate-800 text-slate-400'}`}>{statusMap[s]}</button>
                                     ))}
                                 </div>
                                 <div className="space-y-2">
@@ -389,7 +396,8 @@
                                         <div key={b.id} className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-start cursor-pointer hover:border-yellow-500/50 transition-colors" onClick={() => setEditingBooking(b)}>
                                             <div>
                                                 <div className="flex items-center gap-2 mb-1">
-                                                    <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${getStatusColor(b.status)}`}>{b.status}</span>
+                                                    {/* แสดงสถานะด้วยภาษาไทย */}
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${getStatusColor(b.status)}`}>{statusMap[b.status] || b.status}</span>
                                                     <span className="text-slate-400 text-xs">{b.date} {b.time}</span>
                                                 </div>
                                                 <div className="font-bold text-white">{b.name} <span className="text-slate-500 font-normal">({b.phone})</span></div>
@@ -416,10 +424,11 @@
                                         <div className="bg-slate-800 p-4 rounded-lg">
                                             <label className="text-xs text-slate-400 block mb-2">สถานะ (Status)</label>
                                             <div className="grid grid-cols-2 gap-2">
+                                                {/* ปุ่มเปลี่ยนสถานะตอนแก้ไข ใช้ statusMap เพื่อแสดงภาษาไทย */}
                                                 {['Pending', 'Approved', 'Rejected', 'Completed'].map(s => (
                                                     <button type="button" key={s} onClick={() => setEditingBooking({...editingBooking, status: s})}
                                                         className={`py-2 px-3 rounded text-xs font-bold border transition-colors ${editingBooking.status === s ? getStatusColor(s) + ' border-current' : 'border-slate-700 text-slate-500'}`}>
-                                                        {s}
+                                                        {statusMap[s]}
                                                     </button>
                                                 ))}
                                             </div>
