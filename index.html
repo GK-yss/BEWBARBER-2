@@ -66,8 +66,9 @@
 
         // --- Config & Helpers ---
         const FIXED_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxeMXvseSuyAoWNUNzMuf89fz2lmYr8Cb-heiiUDCGBiT9Akwwu1-_2iim6BbQJotPf/exec";
-        const ALL_BARBERS = ["ช่างบิว (Master)"];
-        const TIME_SLOTS = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
+        // Default barbers - will be replaced by server data
+        const DEFAULT_BARBERS = ["ช่างบิว (Master)"];
+        var TIME_SLOTS = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
 
         // --- เพิ่ม Status Mapping สำหรับแปลภาษา ---
         const statusMap = {
@@ -91,10 +92,11 @@
 
         // --- Sub-Components ---
 
-        const LiveQueueStatus = ({ selectedDate, busySlots }) => {
+        const LiveQueueStatus = ({ selectedDate, busySlots, barbers }) => {
             if (!selectedDate) return null;
             const todaysBookings = busySlots.filter(s => s.startsWith(selectedDate));
             const slotsByTime = {};
+            const activeBarbers = barbers ? barbers.filter(b => b.active).map(b => b.name) : [];
             todaysBookings.forEach(s => {
                 const parts = s.split('|');
                 const time = parts[1];
@@ -111,7 +113,7 @@
                     <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                         {TIME_SLOTS.map(t => {
                             const busyBarbers = slotsByTime[t] || [];
-                            const isFull = busyBarbers.length >= ALL_BARBERS.length;
+                            const isFull = busyBarbers.length >= (activeBarbers.length || 1);
                             return (
                                 <div key={t} className={`flex justify-between items-center p-2 rounded text-xs border ${isFull ? 'bg-red-900/20 border-red-900/50' : 'bg-slate-900/50 border-slate-800'}`}>
                                     <span className="font-bold w-12 text-slate-400">{t} น.</span>
@@ -135,16 +137,16 @@
             );
         };
 
-        const AdminDashboard = ({ allBookings }) => {
+        const AdminDashboard = ({ allBookings, barbers }) => {
             const stats = useMemo(() => {
                 if (!allBookings) return { income: 0, count: 0, byBarber: {} };
                 const validBookings = allBookings.filter(b => b.status === 'Completed' || b.status === 'Approved');
                 const income = validBookings.reduce((sum, b) => sum + (parseInt(b.price) || 0), 0);
                 const byBarber = {};
-                ALL_BARBERS.forEach(b => byBarber[b] = 0);
-                validBookings.forEach(b => { if(byBarber[b] !== undefined) byBarber[b]++; });
+                (barbers || []).forEach(b => { if(b.active) byBarber[b.name] = 0; });
+                validBookings.forEach(b => { if(byBarber[b.barber] !== undefined) byBarber[b.barber]++; });
                 return { income, count: validBookings.length, byBarber };
-            }, [allBookings]);
+            }, [allBookings, barbers]);
 
             const maxVal = Math.max(...Object.values(stats.byBarber), 1);
 
@@ -208,12 +210,13 @@
             setEditingBooking, editingBooking, handleSaveEditBooking, 
             styles, handleAddStyle, handleUpdateStyle, handleDeleteStyle, handleImageUpload, saveStylesToServer, uploadingId, onBack,
             hairstyleImages, uploadingHairstyle, handleHairstyleImageUpload, deleteHairstyleImage, fetchHairstyleImages,
-            isAutoSaving
+            isAutoSaving, barbers, setBarbers
         }) => {
             const [tab, setTab] = useState('dashboard');
             const [filterStatus, setFilterStatus] = useState('All');
             const [confirmDeleteId, setConfirmDeleteId] = useState(null);
             const [selectingImageFor, setSelectingImageFor] = useState(null);
+            const [newBarberName, setNewBarberName] = useState('');
 
             // Filter logic
             const filteredBookings = useMemo(() => {
@@ -238,16 +241,16 @@
                     </div>
                     
                     <div className="flex p-2 bg-slate-800 gap-1 overflow-x-auto">
-                        {['dashboard', 'queue', 'menu', 'images'].map(t => (
+                        {['dashboard', 'queue', 'menu', 'barbers', 'images'].map(t => (
                             <button key={t} onClick={() => setTab(t)} className={`flex-1 py-2 text-xs font-bold uppercase rounded ${tab === t ? 'bg-yellow-500 text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
-                                {t === 'dashboard' ? 'แดชบอร์ด' : t === 'queue' ? 'รายการจอง' : t === 'menu' ? 'เมนู/ร้าน' : 'รูปทรงผม'}
+                                {t === 'dashboard' ? 'แดชบอร์ด' : t === 'queue' ? 'รายการจอง' : t === 'menu' ? 'เมนู/ร้าน' : t === 'barbers' ? 'ช่าง' : 'รูปทรงผม'}
                             </button>
                         ))}
                     </div>
 
                     <div className="max-w-3xl mx-auto p-4 space-y-6">
                         
-                        {tab === 'dashboard' && <AdminDashboard allBookings={allBookings} />}
+                        {tab === 'dashboard' && <AdminDashboard allBookings={allBookings} barbers={barbers} />}
 
                         {tab === 'menu' && (
                             <div className="space-y-6 animate-in">
@@ -322,6 +325,126 @@
                                                 )}
                                             </div>
                                         ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {tab === 'barbers' && (
+                            <div className="space-y-6 animate-in">
+                                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                                    <h3 className="font-bold text-white mb-4 flex items-center gap-2">
+                                        <User size={18}/> จัดการช่าง
+                                    </h3>
+                                    
+                                    {/* เพิ่มช่างใหม่ */}
+                                    <div className="flex gap-2 mb-4">
+                                        <input 
+                                            type="text" 
+                                            value={newBarberName} 
+                                            onChange={e => setNewBarberName(e.target.value)}
+                                            placeholder="ชื่อช่างใหม่"
+                                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-3 text-white text-sm focus:border-yellow-500 outline-none"
+                                        />
+                                        <button 
+                                            onClick={async () => {
+                                                if (!newBarberName.trim()) return alert('กรุณากรอกชื่อช่าง');
+                                                const form = new FormData();
+                                                form.append('action', 'addBarber');
+                                                form.append('name', newBarberName.trim());
+                                                try {
+                                                    const res = await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form });
+                                                    const data = await res.json();
+                                                    if (data.result === 'success') {
+                                                        setBarbers(data.barbers);
+                                                        setNewBarberName('');
+                                                        alert('เพิ่มช่างสำเร็จ!');
+                                                    }
+                                                } catch(e) { alert('เกิดข้อผิดพลาด'); }
+                                            }}
+                                            className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-bold"
+                                        >
+                                            + เพิ่ม
+                                        </button>
+                                    </div>
+
+                                    {/* รายชื่อช่าง */}
+                                    <div className="space-y-2">
+                                        {barbers.map(barber => (
+                                            <div key={barber.id} className="bg-slate-900 p-3 rounded-lg border border-slate-700 flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-3 h-3 rounded-full ${barber.active ? 'bg-green-500' : 'bg-slate-500'}`}></div>
+                                                    <input 
+                                                        type="text" 
+                                                        value={barber.name}
+                                                        onChange={async (e) => {
+                                                            const newName = e.target.value;
+                                                            const form = new FormData();
+                                                            form.append('action', 'updateBarber');
+                                                            form.append('id', barber.id);
+                                                            form.append('name', newName);
+                                                            form.append('active', barber.active);
+                                                            try {
+                                                                const res = await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form });
+                                                                const data = await res.json();
+                                                                if (data.result === 'success') {
+                                                                    setBarbers(data.barbers);
+                                                                }
+                                                            } catch(e) {}
+                                                        }}
+                                                        className="bg-transparent border-b border-slate-700 text-white text-sm outline-none focus:border-yellow-500"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <button 
+                                                        onClick={async () => {
+                                                            const form = new FormData();
+                                                            form.append('action', 'updateBarber');
+                                                            form.append('id', barber.id);
+                                                            form.append('name', barber.name);
+                                                            form.append('active', !barber.active);
+                                                            try {
+                                                                const res = await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form });
+                                                                const data = await res.json();
+                                                                if (data.result === 'success') {
+                                                                    setBarbers(data.barbers);
+                                                                }
+                                                            } catch(e) {}
+                                                        }}
+                                                        className={`px-3 py-1 rounded text-xs font-bold ${barber.active ? 'bg-red-600/20 text-red-400' : 'bg-green-600/20 text-green-400'}`}
+                                                    >
+                                                        {barber.active ? 'ปิด' : 'เปิด'}
+                                                    </button>
+                                                    <button 
+                                                        onClick={async () => {
+                                                            if (!confirm('ยืนยันการลบช่าง?')) return;
+                                                            const form = new FormData();
+                                                            form.append('action', 'deleteBarber');
+                                                            form.append('id', barber.id);
+                                                            try {
+                                                                const res = await fetch(FIXED_SCRIPT_URL, { method: 'POST', body: form });
+                                                                const data = await res.json();
+                                                                if (data.result === 'success') {
+                                                                    setBarbers(data.barbers);
+                                                                    alert('ลบช่างสำเร็จ!');
+                                                                }
+                                                            } catch(e) { alert('เกิดข้อผิดพลาด'); }
+                                                        }}
+                                                        className="text-slate-500 hover:text-red-500 p-1"
+                                                    >
+                                                        <Trash2 size={18}/>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="mt-4 p-3 bg-slate-900/50 rounded-lg text-xs text-slate-400">
+                                        <p className="font-bold text-slate-300 mb-1">💡 หมายเหตุ:</p>
+                                        <ul className="list-disc list-inside space-y-1">
+                                            <li>ช่างที่ถูกปิด จะไม่แสดงให้ลูกค้าเห็น</li>
+                                            <li>ข้อมูลช่างจะถูกเก็บใน Google Sheet</li>
+                                        </ul>
                                     </div>
                                 </div>
                             </div>
@@ -531,6 +654,8 @@
             const [view, setView] = useState('customer');
             const [hairstyles, setHairstyles] = useState(defaultStyles);
             const [shopStatus, setShopStatus] = useState('OPEN');
+            const [barbers, setBarbers] = useState([{ id: 1, name: "ช่างบิว (Master)", active: true }]);
+            const ALL_BARBERS = barbers.filter(b => b.active).map(b => b.name);
             const [busySlots, setBusySlots] = useState([]);
             const [formData, setFormData] = useState({ name: '', phone: '', date: '', time: '', service: 'ตัดผม', selectedStyle: null, barber: 'ช่างท่านไหนก็ได้' });
             
@@ -605,6 +730,9 @@
                     if (data.shopStatus) setShopStatus(data.shopStatus);
                     if (data.busySlots) setBusySlots(data.busySlots);
                     if (data.allBookings) setAllBookings(data.allBookings);
+                    if (data.barbers && Array.isArray(data.barbers) && data.barbers.length > 0) {
+                        setBarbers(data.barbers);
+                    }
                     if (updateStyles && data.styles && Array.isArray(data.styles) && data.styles.length > 0) {
                         setHairstyles(data.styles);
                     }
@@ -690,13 +818,14 @@
             // Updated Busy Logic
             const isSlotBusy = (time) => {
                 if (!formData.date) return false;
+                const activeBarbers = barbers ? barbers.filter(b => b.active).map(b => b.name) : [];
                 if (formData.barber !== 'ช่างท่านไหนก็ได้') {
                     return busySlots.includes(`${formData.date}|${time}|${formData.barber}`);
                 }
-                const busyCount = ALL_BARBERS.filter(b => 
+                const busyCount = activeBarbers.filter(b => 
                     busySlots.includes(`${formData.date}|${time}|${b}`)
                 ).length;
-                return busyCount >= ALL_BARBERS.length;
+                return busyCount >= activeBarbers.length;
             };
 
             const handleSubmit = async (e) => {
@@ -827,6 +956,8 @@
                 deleteHairstyleImage={deleteHairstyleImage}
                 fetchHairstyleImages={fetchHairstyleImages}
                 isAutoSaving={isAutoSaving}
+                barbers={barbers}
+                setBarbers={setBarbers}
             />;
             if (view === 'check-status') return <CheckStatus phone={checkPhone} setPhone={setCheckPhone} onCheck={checkMyBooking} statusState={checkStatusState} myBookings={myBookings} onBack={() => setView('customer')} />;
 
@@ -882,7 +1013,7 @@
                                     </form>
                                     
                                     {/* Live Queue Status */}
-                                    {formData.date && <LiveQueueStatus selectedDate={formData.date} busySlots={busySlots} />}
+                                    {formData.date && <LiveQueueStatus selectedDate={formData.date} busySlots={busySlots} barbers={barbers} />}
                                 </div>
                             )}
                         </div>

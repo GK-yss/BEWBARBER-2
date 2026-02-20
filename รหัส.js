@@ -37,11 +37,16 @@ function handleRequest(e) {
       
       var shopStatus = "OPEN";
       var stylesData = [];
+      var barbersData = [];
       
       // อ่าน Settings
       for (var i = 1; i < settingsRaw.length; i++) {
         if (settingsRaw[i][0] === "SHOP_STATUS") shopStatus = settingsRaw[i][1];
         if (settingsRaw[i][0] === "STYLES_DATA") { try { stylesData = JSON.parse(settingsRaw[i][1]); } catch(e) {} }
+        if (settingsRaw[i][0] === "BARBERS_DATA") { try { barbersData = JSON.parse(settingsRaw[i][1]); } catch(e) {} }
+      }
+      if (barbersData.length === 0) {
+        barbersData = [{ id: 1, name: "ช่างบิว (Master)", active: true }];
       }
       
       var busySlots = [];
@@ -70,7 +75,7 @@ function handleRequest(e) {
         });
       }
       
-      return responseJSON({ shopStatus: shopStatus, busySlots: busySlots, styles: stylesData, allBookings: allBookings });
+      return responseJSON({ shopStatus: shopStatus, busySlots: busySlots, styles: stylesData, barbers: barbersData, allBookings: allBookings });
     }
 
     // --- 2. จองคิว (Booking) ---
@@ -208,6 +213,82 @@ function handleRequest(e) {
       } catch(err) {
         return responseJSON({ result: "error", message: "File not found or cannot delete" });
       }
+    }
+
+    // --- 10. ดึงข้อมูลช่าง (Get Barbers) ---
+    if (action == "getBarbers") {
+      var settingsRaw = settingSheet.getDataRange().getValues();
+      var barbersData = [];
+      for (var i = 1; i < settingsRaw.length; i++) {
+        if (settingsRaw[i][0] === "BARBERS_DATA") { 
+          try { barbersData = JSON.parse(settingsRaw[i][1]); } catch(e) { barbersData = []; } 
+        }
+      }
+      if (barbersData.length === 0) {
+        barbersData = [{ id: 1, name: "ช่างบิว (Master)", active: true }];
+      }
+      return responseJSON({ result: "success", barbers: barbersData });
+    }
+
+    // --- 11. บันทึกข้อมูลช่าง (Save Barbers) ---
+    if (action == "saveBarbers") {
+      saveSettingValue(settingSheet, "BARBERS_DATA", e.parameter.barbers);
+      return responseJSON({ result: "success" });
+    }
+
+    // --- 12. เพิ่มช่างใหม่ (Add Barber) ---
+    if (action == "addBarber") {
+      var settingsRaw = settingSheet.getDataRange().getValues();
+      var barbersData = [];
+      for (var i = 1; i < settingsRaw.length; i++) {
+        if (settingsRaw[i][0] === "BARBERS_DATA") { 
+          try { barbersData = JSON.parse(settingsRaw[i][1]); } catch(e) { barbersData = []; } 
+        }
+      }
+      if (barbersData.length === 0) {
+        barbersData = [{ id: 1, name: "ช่างบิว (Master)", active: true }];
+      }
+      var newId = Math.max(...barbersData.map(function(b) { return b.id; }), 0) + 1;
+      barbersData.push({ id: newId, name: e.parameter.name || "ช่างใหม่", active: true });
+      saveSettingValue(settingSheet, "BARBERS_DATA", JSON.stringify(barbersData));
+      return responseJSON({ result: "success", barbers: barbersData });
+    }
+
+    // --- 13. ลบช่าง (Delete Barber) ---
+    if (action == "deleteBarber") {
+      var barberId = parseInt(e.parameter.id);
+      var settingsRaw = settingSheet.getDataRange().getValues();
+      var barbersData = [];
+      for (var i = 1; i < settingsRaw.length; i++) {
+        if (settingsRaw[i][0] === "BARBERS_DATA") { 
+          try { barbersData = JSON.parse(settingsRaw[i][1]); } catch(e) { barbersData = []; } 
+        }
+      }
+      barbersData = barbersData.filter(function(b) { return b.id !== barberId; });
+      saveSettingValue(settingSheet, "BARBERS_DATA", JSON.stringify(barbersData));
+      return responseJSON({ result: "success", barbers: barbersData });
+    }
+
+    // --- 14. อัพเดทช่าง (Update Barber) ---
+    if (action == "updateBarber") {
+      var barberId = parseInt(e.parameter.id);
+      var barberName = e.parameter.name;
+      var barberActive = e.parameter.active === "true";
+      var settingsRaw = settingSheet.getDataRange().getValues();
+      var barbersData = [];
+      for (var i = 1; i < settingsRaw.length; i++) {
+        if (settingsRaw[i][0] === "BARBERS_DATA") { 
+          try { barbersData = JSON.parse(settingsRaw[i][1]); } catch(e) { barbersData = []; } 
+        }
+      }
+      for (var j = 0; j < barbersData.length; j++) {
+        if (barbersData[j].id === barberId) {
+          barbersData[j].name = barberName;
+          barbersData[j].active = barberActive;
+        }
+      }
+      saveSettingValue(settingSheet, "BARBERS_DATA", JSON.stringify(barbersData));
+      return responseJSON({ result: "success", barbers: barbersData });
     }
 
     return responseJSON({ result: "error", message: "Invalid Action" });
